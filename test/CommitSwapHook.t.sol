@@ -332,4 +332,114 @@ contract CommitSwapHookTest is Test, Deployers {
         vm.expectRevert();
         hook.settleBatch(0, testKey);
     }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Unit & Integration Tests — Phase 6 (Keeper Economics)
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// @notice Happy path: 100% reveals, 100% CoW matched.
+    ///         Keeper still receives 5% cut on all revealed bonds.
+    ///         Committers receive 95% of their bonds back.
+    function test_keeperReward_100pctReveals_happyPath() public {
+        uint256 bondA = 1 ether;
+        uint256 bondB = 2 ether;
+
+        vm.roll(1);
+        bytes32 hashA = hook.computeIntentHash(10 ether, 9 ether, true, PoolId.unwrap(testPoolId), SALT_A, alice);
+        bytes32 hashB = hook.computeIntentHash(10 ether, 9 ether, false, PoolId.unwrap(testPoolId), SALT_B, bob);
+
+        vm.prank(alice);
+        uint256 idA = hook.commit{value: bondA}(hashA);
+        vm.prank(bob);
+        uint256 idB = hook.commit{value: bondB}(hashB);
+
+        vm.roll(5);
+        vm.prank(alice);
+        hook.reveal(idA, 10 ether, 9 ether, true, PoolId.unwrap(testPoolId), SALT_A);
+        vm.prank(bob);
+        hook.reveal(idB, 10 ether, 9 ether, false, PoolId.unwrap(testPoolId), SALT_B);
+
+        uint256 keeperEthBefore = keeper.balance;
+        uint256 aliceEthBefore = alice.balance;
+        uint256 bobEthBefore = bob.balance;
+
+        vm.roll(10);
+        vm.prank(keeper);
+        hook.settleBatch(0, testKey);
+
+        // Keeper receives 5% of bondA (0.05 ether) + 5% of bondB (0.1 ether) = 0.15 ether
+        uint256 expectedKeeperCut = (bondA * 500 / 10000) + (bondB * 500 / 10000);
+        assertEq(keeper.balance - keeperEthBefore, expectedKeeperCut, "Keeper fee mismatch");
+
+        // Alice receives 95% of bondA (0.95 ether)
+        assertEq(alice.balance - aliceEthBefore, bondA * 9500 / 10000, "Alice refund mismatch");
+
+        // Bob receives 95% of bondB (1.9 ether)
+        assertEq(bob.balance - bobEthBefore, bondB * 9500 / 10000, "Bob refund mismatch");
+
+        // Contract balance becomes 0
+        assertEq(address(hook).balance, 0, "Hook should have 0 ETH balance");
+    }
+
+    /// @notice Unrevealed commitments: 100% of forfeited bonds go directly to keeper.
+    function test_keeperReward_allForfeited() public {
+        uint256 bondA = 0.5 ether;
+        uint256 bondB = 0.5 ether;
+
+        vm.roll(1);
+        bytes32 hashA = hook.computeIntentHash(10 ether, 9 ether, true, PoolId.unwrap(testPoolId), SALT_A, alice);
+        bytes32 hashB = hook.computeIntentHash(10 ether, 9 ether, false, PoolId.unwrap(testPoolId), SALT_B, bob);
+
+        vm.prank(alice);
+        hook.commit{value: bondA}(hashA);
+        vm.prank(bob);
+        hook.commit{value: bondB}(hashB);
+
+        // Neither reveals — advance to settlement window
+        uint256 keeperEthBefore = keeper.balance;
+
+        vm.roll(10);
+        vm.prank(keeper);
+        hook.settleBatch(0, testKey);
+
+        // Keeper receives 100% of both bonds (1.0 ether)
+        assertEq(keeper.balance - keeperEthBefore, bondA + bondB, "Keeper should receive 100% of forfeited bonds");
+        assertEq(address(hook).balance, 0, "Hook should have 0 ETH balance");
+    }
+
+    /// @notice Mixed window: Alice reveals (95% refund, 5% fee), Bob does not (100% forfeited).
+    function test_keeperReward_mixedReveals() public {
+        uint256 bondA = 1 ether;
+        uint256 bondB = 1 ether;
+
+        vm.roll(1);
+        bytes32 hashA = hook.computeIntentHash(10 ether, 9 ether, true, PoolId.unwrap(testPoolId), SALT_A, alice);
+        bytes32 hashB = hook.computeIntentHash(10 ether, 9 ether, false, PoolId.unwrap(testPoolId), SALT_B, bob);
+
+        vm.prank(alice);
+        uint256 idA = hook.commit{value: bondA}(hashA);
+        vm.prank(bob);
+        hook.commit{value: bondB}(hashB);
+
+        vm.roll(5);
+        vm.prank(alice);
+        hook.reveal(idA, 10 ether, 9 ether, true, PoolId.unwrap(testPoolId), SALT_A);
+        // Bob does not reveal
+
+        uint256 keeperEthBefore = keeper.balance;
+        uint256 aliceEthBefore = alice.balance;
+
+        vm.roll(10);
+        vm.prank(keeper);
+        hook.settleBatch(0, testKey);
+
+        // Keeper receives: 5% of Alice's bond (0.05 ether) + 100% of Bob's bond (1.0 ether) = 1.05 ether
+        uint256 expectedKeeperFee = (bondA * 500 / 10000) + bondB;
+        assertEq(keeper.balance - keeperEthBefore, expectedKeeperFee, "Keeper mixed reward mismatch");
+
+        // Alice receives 95% of her bond (0.95 ether)
+        assertEq(alice.balance - aliceEthBefore, bondA * 9500 / 10000, "Alice refund mismatch");
+
+        assertEq(address(hook).balance, 0, "Hook should have 0 ETH balance");
+    }
 }

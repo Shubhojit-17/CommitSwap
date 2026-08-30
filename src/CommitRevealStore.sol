@@ -313,14 +313,7 @@ contract CommitRevealStore {
         c.minAmountOut = minAmountOut;
         c.zeroForOne = zeroForOne;
 
-        uint256 bond = c.bondAmount;
-        c.bondAmount = 0;
-
         emit Revealed(commitmentId, amount, minAmountOut, zeroForOne);
-
-        // --- Return bond (interactions last — CEI pattern) ---
-        (bool ok, ) = payable(c.committer).call{value: bond}("");
-        if (!ok) revert TransferFailed();
     }
 
     /// @notice Mark an unrevealed commitment as forfeited and add its bond to the

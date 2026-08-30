@@ -218,21 +218,21 @@ contract CommitRevealStoreTest is Test {
         vm.prank(alice);
         store.reveal(id, amount, minOut, zeroForOne, POOL_ID, SALT);
 
-        // Commitment should be marked revealed, bondAmount zeroed, and plaintext fields persisted.
+        // Commitment should be marked revealed, bondAmount retained, and plaintext fields persisted.
         CommitRevealStore.Commitment memory c = store.getCommitment(id);
         assertTrue(c.revealed, "should be revealed");
-        assertEq(c.bondAmount, 0, "bondAmount should be zeroed on reveal");
+        assertEq(c.bondAmount, minBond, "bondAmount should be retained on reveal");
         assertEq(c.amount, amount, "amount mismatch");
         assertEq(c.minAmountOut, minOut, "minAmountOut mismatch");
         assertEq(c.zeroForOne, zeroForOne, "zeroForOne mismatch");
 
-        // Bond should be returned.
-        assertEq(alice.balance, aliceBalBefore + minBond, "bond not returned");
-        assertEq(address(store).balance, 0, "contract should have 0 balance");
+        // Bond is retained in store until settleBatch
+        assertEq(alice.balance, aliceBalBefore, "bond should remain in store until settlement");
+        assertEq(address(store).balance, minBond, "contract should retain bond");
     }
 
-    /// @notice Explicit test for Change 2: bondAmount is 0 immediately after reveal.
-    function test_reveal_zerosBondAmount() public {
+    /// @notice Explicit test for Phase 6 bond retention: bondAmount is retained immediately after reveal.
+    function test_reveal_retainsBondAmount() public {
         uint256 amount = 1 ether;
         uint256 minOut = DEFAULT_MIN_OUT;
         bool zeroForOne = true;
@@ -245,7 +245,7 @@ contract CommitRevealStoreTest is Test {
         vm.prank(alice);
         store.reveal(id, amount, minOut, zeroForOne, POOL_ID, SALT);
 
-        assertEq(store.getCommitment(id).bondAmount, 0, "bondAmount must be 0 after reveal");
+        assertEq(store.getCommitment(id).bondAmount, minBond, "bondAmount must be retained after reveal");
     }
 
     /// @notice Reveal emits the Revealed event with plaintext parameters.
@@ -709,13 +709,14 @@ contract CommitRevealStoreTest is Test {
         uint256 aliceBalBefore = alice.balance;
         vm.prank(alice);
         store.reveal(idA, amountA, minOutA, true, POOL_ID, keccak256("saltA"));
-        assertEq(alice.balance, aliceBalBefore + minBond, "Alice bond not returned");
+        // Bond is retained in store until settlement
+        assertEq(alice.balance, aliceBalBefore, "Alice bond retained in store");
 
         // Window 2+: Bob's commitment is forfeit-eligible.
         _advanceToBlock(_windowStart(2));
         store.forfeitBond(idB);
 
-        // Keeper sweeps.
+        // Keeper sweeps Bob's forfeited bond.
         uint256 keeperBalBefore = keeper.balance;
         vm.prank(keeper);
         store.withdrawForfeited();
@@ -723,14 +724,15 @@ contract CommitRevealStoreTest is Test {
 
         // Final state checks.
         assertTrue(store.getCommitment(idA).revealed, "Alice should be revealed");
-        assertEq(store.getCommitment(idA).bondAmount, 0, "Alice bond should be zeroed");
+        assertEq(store.getCommitment(idA).bondAmount, minBond, "Alice bond should remain in store");
         assertEq(store.getCommitment(idA).amount, amountA, "Alice amount persisted");
         assertEq(store.getCommitment(idA).minAmountOut, minOutA, "Alice minAmountOut persisted");
         assertEq(store.getCommitment(idA).zeroForOne, true, "Alice zeroForOne persisted");
 
         assertFalse(store.getCommitment(idB).revealed, "Bob should NOT be revealed");
         assertEq(store.getCommitment(idB).bondAmount, 0, "Bob bond should be zeroed");
-        assertEq(address(store).balance, 0, "contract should be empty");
+        // Alice's retained bond remains in store
+        assertEq(address(store).balance, minBond, "contract should hold Alice's retained bond");
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -841,7 +843,7 @@ contract CommitRevealStoreTest is Test {
         uint256 revealBitmap = uint256(revealBitmapRaw) % (1 << numCommits);
 
         uint256 totalBonded;
-        uint256 totalReturned;
+        uint256 totalRetained;
         uint256 totalForfeited;
 
         uint256[] memory ids = new uint256[](numCommits);
@@ -871,7 +873,7 @@ contract CommitRevealStoreTest is Test {
 
                 vm.prank(alice);
                 store.reveal(ids[i], amount, minOut, zeroForOne, POOL_ID, salt);
-                totalReturned += minBond;
+                totalRetained += minBond;
             }
         }
 
@@ -885,15 +887,15 @@ contract CommitRevealStoreTest is Test {
             }
         }
 
-        // Invariant: totalBonded == totalReturned + totalForfeited.
-        assertEq(totalBonded, totalReturned + totalForfeited, "bond accounting mismatch");
+        // Invariant: totalBonded == totalRetained + totalForfeited.
+        assertEq(totalBonded, totalRetained + totalForfeited, "bond accounting mismatch");
 
         // Invariant: forfeitedBonds storage == totalForfeited.
         assertEq(store.forfeitedBonds(), totalForfeited, "forfeited storage mismatch");
 
-        // Invariant: contract balance == totalForfeited (revealed bonds returned, only
-        // forfeited bonds remain).
-        assertEq(address(store).balance, totalForfeited, "contract balance mismatch");
+        // Invariant: contract balance == totalRetained + totalForfeited (revealed bonds retained,
+        // forfeited bonds awaiting sweep).
+        assertEq(address(store).balance, totalRetained + totalForfeited, "contract balance mismatch");
     }
 
     /// @notice Fuzz: bond amounts with variable-size bonds (not just MIN_BOND).
