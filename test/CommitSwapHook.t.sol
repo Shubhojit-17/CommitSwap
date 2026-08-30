@@ -60,6 +60,15 @@ contract CommitSwapHookTest is Test, Deployers {
         // Initialize pool with 1:1 initial price
         manager.initialize(testKey, SQRT_PRICE_1_1);
 
+        // Seed initial pool liquidity for AMM fallback routing
+        IPoolManager.ModifyLiquidityParams memory liqParams = IPoolManager.ModifyLiquidityParams({
+            tickLower: -1200,
+            tickUpper: 1200,
+            liquidityDelta: 10000 ether,
+            salt: 0
+        });
+        modifyLiquidityRouter.modifyLiquidity(testKey, liqParams, ZERO_BYTES);
+
         // Fund user accounts with tokens & ETH
         vm.deal(alice, 100 ether);
         vm.deal(bob, 100 ether);
@@ -88,7 +97,7 @@ contract CommitSwapHookTest is Test, Deployers {
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // Unit & Integration Tests
+    // Unit & Integration Tests — Phase 4 (CoW Matching)
     // ──────────────────────────────────────────────────────────────────────
 
     /// @notice Single matched pair (Alice sells 10 token0 for token1, Bob sells 10 token1 for token0).
@@ -207,9 +216,59 @@ contract CommitSwapHookTest is Test, Deployers {
         assertTrue(hook.windowSettled(0));
     }
 
-    /// @notice Partial match: Alice offers 10 token0, Bob offers 6 token1.
-    ///         Matches 6 units, Alice has 4 residual, Bob has 0 residual.
-    function test_settleBatch_partialMatch() public {
+    // ──────────────────────────────────────────────────────────────────────
+    // Unit & Integration Tests — Phase 5 (AMM Fallback)
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// @notice 0% matched: Alice and Bob commit in the same direction (both token0 -> token1).
+    ///         0 CoW matches. 100% of volume routes through AMM pool fallback swaps.
+    function test_settleBatch_0pctMatched_allAMM() public {
+        uint256 amountA = 5 ether;
+        uint256 minOutA = 4.5 ether;
+
+        uint256 amountB = 5 ether;
+        uint256 minOutB = 4.5 ether;
+
+        // Window 0: Both Alice and Bob offer token0 for token1
+        vm.roll(1);
+        bytes32 hashA = hook.computeIntentHash(amountA, minOutA, true, PoolId.unwrap(testPoolId), SALT_A, alice);
+        bytes32 hashB = hook.computeIntentHash(amountB, minOutB, true, PoolId.unwrap(testPoolId), SALT_B, bob);
+
+        vm.prank(alice);
+        uint256 idA = hook.commit{value: MIN_BOND}(hashA);
+        vm.prank(bob);
+        uint256 idB = hook.commit{value: MIN_BOND}(hashB);
+
+        // Window 1: Both reveal
+        vm.roll(5);
+        vm.prank(alice);
+        hook.reveal(idA, amountA, minOutA, true, PoolId.unwrap(testPoolId), SALT_A);
+        vm.prank(bob);
+        hook.reveal(idB, amountB, minOutB, true, PoolId.unwrap(testPoolId), SALT_B);
+
+        uint256 alice0Before = MockERC20(Currency.unwrap(currency0)).balanceOf(alice);
+        uint256 alice1Before = MockERC20(Currency.unwrap(currency1)).balanceOf(alice);
+        uint256 bob0Before = MockERC20(Currency.unwrap(currency0)).balanceOf(bob);
+        uint256 bob1Before = MockERC20(Currency.unwrap(currency1)).balanceOf(bob);
+
+        // Window 2: Keeper settles
+        vm.roll(10);
+        vm.prank(keeper);
+        hook.settleBatch(0, testKey);
+
+        assertTrue(hook.windowSettled(0));
+
+        // Both Alice and Bob spent 5 token0 and received > 4.5 token1 via AMM
+        assertEq(MockERC20(Currency.unwrap(currency0)).balanceOf(alice), alice0Before - amountA);
+        assertGe(MockERC20(Currency.unwrap(currency1)).balanceOf(alice) - alice1Before, minOutA);
+
+        assertEq(MockERC20(Currency.unwrap(currency0)).balanceOf(bob), bob0Before - amountB);
+        assertGe(MockERC20(Currency.unwrap(currency1)).balanceOf(bob) - bob1Before, minOutB);
+    }
+
+    /// @notice Partial match with AMM fallback: Alice offers 10 token0, Bob offers 6 token1.
+    ///         6 units match via CoW, 4 residual token0 swap through AMM fallback.
+    function test_settleBatch_partialMatch_withAMMFallback() public {
         uint256 amountA = 10 ether;
         uint256 minOutA = 9 ether;
         bool zeroForOneA = true;
@@ -242,12 +301,35 @@ contract CommitSwapHookTest is Test, Deployers {
         vm.prank(keeper);
         hook.settleBatch(0, testKey);
 
-        // 6 ether matched: Alice gave 6 token0, got 6 token1
-        assertEq(MockERC20(Currency.unwrap(currency0)).balanceOf(alice), alice0Before - 6 ether);
-        assertEq(MockERC20(Currency.unwrap(currency1)).balanceOf(alice), alice1Before + 6 ether);
+        assertTrue(hook.windowSettled(0));
 
-        // Bob gave 6 token1, got 6 token0
+        // Alice spent full 10 token0, received 6 token1 from CoW + ~3.98 token1 from AMM fallback
+        assertEq(MockERC20(Currency.unwrap(currency0)).balanceOf(alice), alice0Before - 10 ether);
+        assertGe(MockERC20(Currency.unwrap(currency1)).balanceOf(alice) - alice1Before, minOutA);
+
+        // Bob matched 100% (6 token1 spent, 6 token0 received)
         assertEq(MockERC20(Currency.unwrap(currency1)).balanceOf(bob), bob1Before - 6 ether);
         assertEq(MockERC20(Currency.unwrap(currency0)).balanceOf(bob), bob0Before + 6 ether);
+    }
+
+    /// @notice Slippage exceeded on AMM fallback leg reverts batch.
+    function test_settleBatch_ammFallback_slippageExceeded_reverts() public {
+        uint256 amountA = 5 ether;
+        // Unreasonable min output (100 token1 for 5 token0 when price is 1:1)
+        uint256 minOutA = 100 ether;
+
+        vm.roll(1);
+        bytes32 hashA = hook.computeIntentHash(amountA, minOutA, true, PoolId.unwrap(testPoolId), SALT_A, alice);
+        vm.prank(alice);
+        uint256 idA = hook.commit{value: MIN_BOND}(hashA);
+
+        vm.roll(5);
+        vm.prank(alice);
+        hook.reveal(idA, amountA, minOutA, true, PoolId.unwrap(testPoolId), SALT_A);
+
+        vm.roll(10);
+        vm.prank(keeper);
+        vm.expectRevert();
+        hook.settleBatch(0, testKey);
     }
 }

@@ -8,6 +8,7 @@ import {IntentMatcher} from "./IntentMatcher.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {IUnlockCallback} from "v4-core/interfaces/callback/IUnlockCallback.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
+import {TickMath} from "v4-core/libraries/TickMath.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
@@ -17,7 +18,7 @@ import {StateLibrary} from "v4-core/libraries/StateLibrary.sol";
 import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 
 /// @title CommitSwapHook
-/// @notice Uniswap v4 hook implementing MEV-resistant commit-reveal batch swaps with CoW matching.
+/// @notice Uniswap v4 hook implementing MEV-resistant commit-reveal batch swaps with CoW matching & AMM fallback.
 contract CommitSwapHook is BaseHook, CommitRevealStore, IUnlockCallback {
     using PoolIdLibrary for PoolKey;
     using CurrencyLibrary for Currency;
@@ -29,6 +30,7 @@ contract CommitSwapHook is BaseHook, CommitRevealStore, IUnlockCallback {
     error WindowNotClosed();
     error WindowAlreadySettled();
     error PoolKeyMismatch();
+    error SlippageExceeded();
 
     // ──────────────────────────────────────────────────────────────────────
     // Events
@@ -39,7 +41,9 @@ contract CommitSwapHook is BaseHook, CommitRevealStore, IUnlockCallback {
         uint256 totalRevealed,
         uint256 totalMatchedPairs,
         uint256 totalMatched0,
-        uint256 totalMatched1
+        uint256 totalMatched1,
+        uint256 totalResidual0,
+        uint256 totalResidual1
     );
 
     // ──────────────────────────────────────────────────────────────────────
@@ -115,7 +119,7 @@ contract CommitSwapHook is BaseHook, CommitRevealStore, IUnlockCallback {
         uint256 totalCommits = commitIds.length;
 
         if (totalCommits == 0) {
-            emit BatchSettled(windowIndex, keeper, 0, 0, 0, 0);
+            emit BatchSettled(windowIndex, keeper, 0, 0, 0, 0, 0, 0);
             return "";
         }
 
@@ -128,7 +132,7 @@ contract CommitSwapHook is BaseHook, CommitRevealStore, IUnlockCallback {
         }
 
         if (revealedCount == 0) {
-            emit BatchSettled(windowIndex, keeper, 0, 0, 0, 0);
+            emit BatchSettled(windowIndex, keeper, 0, 0, 0, 0, 0, 0);
             return "";
         }
 
@@ -157,9 +161,15 @@ contract CommitSwapHook is BaseHook, CommitRevealStore, IUnlockCallback {
 
         uint256 totalMatched0 = 0;
         uint256 totalMatched1 = 0;
+        uint256 totalResidual0 = 0;
+        uint256 totalResidual1 = 0;
         uint256 matchedPairs = 0;
 
-        // Pass 1: Settle all input tokens into PoolManager from counterparties
+        // ══════════════════════════════════════════════════════════════════
+        // CoW MATCHING SETTLEMENT
+        // ══════════════════════════════════════════════════════════════════
+
+        // Pass 1: Settle all CoW matched input tokens into PoolManager
         for (uint256 i = 0; i < revealedCount; i++) {
             if (outcomes[i].matchedAmountIn > 0) {
                 matchedPairs++;
@@ -174,7 +184,7 @@ contract CommitSwapHook is BaseHook, CommitRevealStore, IUnlockCallback {
             }
         }
 
-        // Pass 2: Distribute all matched output tokens from PoolManager to counterparties
+        // Pass 2: Distribute all CoW matched output tokens from PoolManager
         for (uint256 i = 0; i < revealedCount; i++) {
             if (outcomes[i].matchedAmountIn > 0) {
                 address committer = revealed[i].committer;
@@ -188,7 +198,72 @@ contract CommitSwapHook is BaseHook, CommitRevealStore, IUnlockCallback {
             }
         }
 
-        emit BatchSettled(windowIndex, keeper, revealedCount, matchedPairs, totalMatched0, totalMatched1);
+        // ══════════════════════════════════════════════════════════════════
+        // AMM FALLBACK FOR UNMATCHED RESIDUALS
+        // ══════════════════════════════════════════════════════════════════
+
+        for (uint256 i = 0; i < revealedCount; i++) {
+            uint256 resIn = outcomes[i].residualAmountIn;
+            if (resIn > 0) {
+                address committer = revealed[i].committer;
+                bool zfo = revealed[i].zeroForOne;
+
+                if (zfo) {
+                    totalResidual0 += resIn;
+                    // Settle input token0 into PoolManager
+                    _settleCurrency(key.currency0, committer, resIn);
+
+                    // Execute exact-input fallback swap through AMM
+                    IPoolManager.SwapParams memory swapParams = IPoolManager.SwapParams({
+                        zeroForOne: true,
+                        amountSpecified: -int256(resIn),
+                        sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
+                    });
+                    BalanceDelta swapDelta = poolManager.swap(key, swapParams, "");
+
+                    uint256 outputAmount = uint256(int256(swapDelta.amount1()));
+
+                    // Verify pro-rated slippage limit
+                    uint256 proRatedMinOut = (resIn * revealed[i].minAmountOut) / revealed[i].amount;
+                    if (outputAmount < proRatedMinOut) revert SlippageExceeded();
+
+                    // Take output token1 from PoolManager to committer
+                    poolManager.take(key.currency1, committer, outputAmount);
+                } else {
+                    totalResidual1 += resIn;
+                    // Settle input token1 into PoolManager
+                    _settleCurrency(key.currency1, committer, resIn);
+
+                    // Execute exact-input fallback swap through AMM
+                    IPoolManager.SwapParams memory swapParams = IPoolManager.SwapParams({
+                        zeroForOne: false,
+                        amountSpecified: -int256(resIn),
+                        sqrtPriceLimitX96: TickMath.MAX_SQRT_PRICE - 1
+                    });
+                    BalanceDelta swapDelta = poolManager.swap(key, swapParams, "");
+
+                    uint256 outputAmount = uint256(int256(swapDelta.amount0()));
+
+                    // Verify pro-rated slippage limit
+                    uint256 proRatedMinOut = (resIn * revealed[i].minAmountOut) / revealed[i].amount;
+                    if (outputAmount < proRatedMinOut) revert SlippageExceeded();
+
+                    // Take output token0 from PoolManager to committer
+                    poolManager.take(key.currency0, committer, outputAmount);
+                }
+            }
+        }
+
+        emit BatchSettled(
+            windowIndex,
+            keeper,
+            revealedCount,
+            matchedPairs,
+            totalMatched0,
+            totalMatched1,
+            totalResidual0,
+            totalResidual1
+        );
         return "";
     }
 
