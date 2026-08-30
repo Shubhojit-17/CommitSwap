@@ -38,19 +38,19 @@ library IntentMatcher {
 
     /// @notice Plaintext revealed swap intent data.
     struct RevealedIntent {
-        uint256 id;            // commitmentId, used for output ordering / tie-breaking
+        uint256 id; // commitmentId, used for output ordering / tie-breaking
         address committer;
-        uint256 amount;        // amountIn: how much of their input token they are offering
-        uint256 minAmountOut;  // minimum output they will accept for full amount
-        bool zeroForOne;       // true = offering token0 for token1, false = offering token1 for token0
+        uint256 amount; // amountIn: how much of their input token they are offering
+        uint256 minAmountOut; // minimum output they will accept for full amount
+        bool zeroForOne; // true = offering token0 for token1, false = offering token1 for token0
     }
 
     /// @notice Outcome for a single input intent after matching.
     struct MatchOutcome {
         uint256 id;
-        uint256 matchedAmountIn;   // portion of `amount` that got matched against counterparties
-        uint256 matchedAmountOut;  // total output received for the matched portion (per price18)
-        uint256 residualAmountIn;  // amount - matchedAmountIn (unmatched, needs AMM fallback in Phase 3)
+        uint256 matchedAmountIn; // portion of `amount` that got matched against counterparties
+        uint256 matchedAmountOut; // total output received for the matched portion (per price18)
+        uint256 residualAmountIn; // amount - matchedAmountIn (unmatched, needs AMM fallback in Phase 3)
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -61,10 +61,11 @@ library IntentMatcher {
     /// @param intents List of revealed intents in the current window.
     /// @param price18 Price of token0 in token1 terms, scaled by 1e18 (token1Amount = token0Amount * price18 / 1e18).
     /// @return outcomes Matching results for each input intent, in the exact same array order as `intents`.
-    function matchIntents(
-        RevealedIntent[] memory intents,
-        uint256 price18
-    ) internal pure returns (MatchOutcome[] memory outcomes) {
+    function matchIntents(RevealedIntent[] memory intents, uint256 price18)
+        internal
+        pure
+        returns (MatchOutcome[] memory outcomes)
+    {
         uint256 n = intents.length;
         outcomes = new MatchOutcome[](n);
 
@@ -77,10 +78,7 @@ library IntentMatcher {
         // Initialize outcomes to 0 matched, 100% residual
         for (uint256 i = 0; i < n; i++) {
             outcomes[i] = MatchOutcome({
-                id: intents[i].id,
-                matchedAmountIn: 0,
-                matchedAmountOut: 0,
-                residualAmountIn: intents[i].amount
+                id: intents[i].id, matchedAmountIn: 0, matchedAmountOut: 0, residualAmountIn: intents[i].amount
             });
         }
 
@@ -113,20 +111,8 @@ library IntentMatcher {
                 continue;
             }
 
-            (
-                MatchOutcome memory resT,
-                MatchOutcome memory resF,
-                bool advanceT,
-                bool advanceF,
-                bool matchedAny
-            ) = _processPair(
-                intents[idxT],
-                intents[idxF],
-                remIn[idxT],
-                remIn[idxF],
-                price18,
-                outcomes[idxT],
-                outcomes[idxF]
+            (MatchOutcome memory resT, MatchOutcome memory resF, bool advanceT, bool advanceF, bool matchedAny) = _processPair(
+                intents[idxT], intents[idxF], remIn[idxT], remIn[idxF], price18, outcomes[idxT], outcomes[idxF]
             );
 
             outcomes[idxT] = resT;
@@ -169,13 +155,11 @@ library IntentMatcher {
         uint256 price18,
         MatchOutcome memory outcomeT,
         MatchOutcome memory outcomeF
-    ) private pure returns (
-        MatchOutcome memory newT,
-        MatchOutcome memory newF,
-        bool advanceT,
-        bool advanceF,
-        bool matchedAny
-    ) {
+    )
+        private
+        pure
+        returns (MatchOutcome memory newT, MatchOutcome memory newF, bool advanceT, bool advanceF, bool matchedAny)
+    {
         newT = outcomeT;
         newF = outcomeF;
 
@@ -286,7 +270,7 @@ library IntentMatcher {
         // The overflow check is done manually: if prod0 / a != b, overflow occurred.
         unchecked {
             uint256 prod0 = a * b; // Low 256 bits of the product
-            uint256 prod1;         // High 256 bits of the product
+            uint256 prod1; // High 256 bits of the product
 
             // Detect overflow: if a != 0 && prod0 / a != b, then overflow occurred.
             if (a == 0 || b == 0) {

@@ -41,11 +41,7 @@ contract CommitSwapHookTest is Test, Deployers {
 
         // Precompute testKey and testPoolId with this hook address
         testKey = PoolKey({
-            currency0: currency0,
-            currency1: currency1,
-            fee: 3000,
-            tickSpacing: 60,
-            hooks: IHooks(hookAddress)
+            currency0: currency0, currency1: currency1, fee: 3000, tickSpacing: 60, hooks: IHooks(hookAddress)
         });
         testPoolId = testKey.toId();
 
@@ -62,10 +58,7 @@ contract CommitSwapHookTest is Test, Deployers {
 
         // Seed initial pool liquidity for AMM fallback routing
         IPoolManager.ModifyLiquidityParams memory liqParams = IPoolManager.ModifyLiquidityParams({
-            tickLower: -1200,
-            tickUpper: 1200,
-            liquidityDelta: 10000 ether,
-            salt: 0
+            tickLower: -1200, tickUpper: 1200, liquidityDelta: 10000 ether, salt: 0
         });
         modifyLiquidityRouter.modifyLiquidity(testKey, liqParams, ZERO_BYTES);
 
@@ -148,7 +141,9 @@ contract CommitSwapHookTest is Test, Deployers {
         // Verify balances after matching:
         // Alice gave 10 token0, received 10 token1
         assertEq(MockERC20(Currency.unwrap(currency0)).balanceOf(alice), alice0Before - amountA, "Alice token0 spent");
-        assertEq(MockERC20(Currency.unwrap(currency1)).balanceOf(alice), alice1Before + amountA, "Alice token1 received");
+        assertEq(
+            MockERC20(Currency.unwrap(currency1)).balanceOf(alice), alice1Before + amountA, "Alice token1 received"
+        );
 
         // Bob gave 10 token1, received 10 token0
         assertEq(MockERC20(Currency.unwrap(currency1)).balanceOf(bob), bob1Before - amountB, "Bob token1 spent");

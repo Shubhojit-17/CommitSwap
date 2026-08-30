@@ -13,19 +13,13 @@ contract IntentMatcherTest is Test {
     // Helper Constructors
     // ──────────────────────────────────────────────────────────────────────
 
-    function _createIntent(
-        uint256 id,
-        address committer,
-        uint256 amount,
-        uint256 minAmountOut,
-        bool zeroForOne
-    ) internal pure returns (IntentMatcher.RevealedIntent memory) {
+    function _createIntent(uint256 id, address committer, uint256 amount, uint256 minAmountOut, bool zeroForOne)
+        internal
+        pure
+        returns (IntentMatcher.RevealedIntent memory)
+    {
         return IntentMatcher.RevealedIntent({
-            id: id,
-            committer: committer,
-            amount: amount,
-            minAmountOut: minAmountOut,
-            zeroForOne: zeroForOne
+            id: id, committer: committer, amount: amount, minAmountOut: minAmountOut, zeroForOne: zeroForOne
         });
     }
 
@@ -194,11 +188,7 @@ contract IntentMatcherTest is Test {
 
     /// @notice Fuzz: Conservation of Amount Invariant.
     ///         For every intent, matchedAmountIn + residualAmountIn == amount.
-    function testFuzz_conservationOfAmount(
-        uint8 countRaw,
-        uint96 priceRaw,
-        uint256 seed
-    ) public pure {
+    function testFuzz_conservationOfAmount(uint8 countRaw, uint96 priceRaw, uint256 seed) public pure {
         uint256 count = bound(countRaw, 1, 15);
         uint256 price18 = bound(priceRaw, 1e15, 1e21); // price between 0.001 and 1000
 
@@ -227,11 +217,7 @@ contract IntentMatcherTest is Test {
 
     /// @notice Fuzz: Zero-Sum / Matching Balance Invariant.
     ///         Total token0 matched converted to token1 terms equals total token1 matched, within 1 wei rounding tolerance.
-    function testFuzz_zeroSumMatchingBalance(
-        uint8 countRaw,
-        uint96 priceRaw,
-        uint256 seed
-    ) public pure {
+    function testFuzz_zeroSumMatchingBalance(uint8 countRaw, uint96 priceRaw, uint256 seed) public pure {
         uint256 count = bound(countRaw, 1, 15);
         uint256 price18 = bound(priceRaw, 1e16, 1e20);
 

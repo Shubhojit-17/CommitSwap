@@ -136,12 +136,7 @@ contract CommitRevealStore {
     );
 
     /// @notice Emitted when a commitment is successfully revealed.
-    event Revealed(
-        uint256 indexed commitmentId,
-        uint256 amount,
-        uint256 minAmountOut,
-        bool zeroForOne
-    );
+    event Revealed(uint256 indexed commitmentId, uint256 amount, uint256 minAmountOut, bool zeroForOne);
 
     /// @notice Emitted when forfeited bonds are swept.
     event ForfeitedBondsWithdrawn(address indexed recipient, uint256 amount);
@@ -302,9 +297,7 @@ contract CommitRevealStore {
         // Preimage: abi.encode(amount, minAmountOut, zeroForOne, poolId, salt, committer).
         // Including the committer in the hash prevents third-party front-running of reveals
         // (see 02-threat-model.md §6).
-        bytes32 computedHash = keccak256(
-            abi.encode(amount, minAmountOut, zeroForOne, poolId, salt, c.committer)
-        );
+        bytes32 computedHash = keccak256(abi.encode(amount, minAmountOut, zeroForOne, poolId, salt, c.committer));
         if (computedHash != c.intentHash) revert HashMismatch();
 
         // --- Effects & Plaintext Persistence ---
@@ -363,7 +356,7 @@ contract CommitRevealStore {
 
         emit ForfeitedBondsWithdrawn(msg.sender, amount);
 
-        (bool ok, ) = payable(msg.sender).call{value: amount}("");
+        (bool ok,) = payable(msg.sender).call{value: amount}("");
         if (!ok) revert TransferFailed();
     }
 

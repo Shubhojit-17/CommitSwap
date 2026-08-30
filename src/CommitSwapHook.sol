@@ -57,12 +57,7 @@ contract CommitSwapHook is BaseHook, CommitRevealStore, IUnlockCallback {
     // ──────────────────────────────────────────────────────────────────────
     // Constructor
     // ──────────────────────────────────────────────────────────────────────
-    constructor(
-        IPoolManager _poolManager,
-        bytes32 _poolId,
-        uint256 _windowBlocks,
-        uint256 _minBond
-    )
+    constructor(IPoolManager _poolManager, bytes32 _poolId, uint256 _windowBlocks, uint256 _minBond)
         BaseHook(_poolManager)
         CommitRevealStore(_poolId, _windowBlocks, _minBond)
     {}
@@ -92,12 +87,12 @@ contract CommitSwapHook is BaseHook, CommitRevealStore, IUnlockCallback {
     // ──────────────────────────────────────────────────────────────────────
     // Hook Callbacks
     // ──────────────────────────────────────────────────────────────────────
-    function beforeSwap(
-        address,
-        PoolKey calldata,
-        IPoolManager.SwapParams calldata,
-        bytes calldata
-    ) external override onlyPoolManager returns (bytes4, BeforeSwapDelta, uint24) {
+    function beforeSwap(address, PoolKey calldata, IPoolManager.SwapParams calldata, bytes calldata)
+        external
+        override
+        onlyPoolManager
+        returns (bytes4, BeforeSwapDelta, uint24)
+    {
         return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
     }
 

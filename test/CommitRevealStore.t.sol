@@ -15,7 +15,7 @@ contract CommitRevealStoreTest is Test {
     CommitRevealStore store;
 
     address alice = makeAddr("alice");
-    address bob   = makeAddr("bob");
+    address bob = makeAddr("bob");
     address keeper = makeAddr("keeper");
 
     /// @dev A dummy v4 poolId used in tests (bytes32, Option A).
@@ -208,7 +208,7 @@ contract CommitRevealStoreTest is Test {
 
         // Commit in window 0.
         _advanceToBlock(0);
-        (uint256 id, ) = _commitAsUser(alice, amount, minOut, zeroForOne, SALT);
+        (uint256 id,) = _commitAsUser(alice, amount, minOut, zeroForOne, SALT);
 
         uint256 aliceBalBefore = alice.balance;
 
@@ -238,7 +238,7 @@ contract CommitRevealStoreTest is Test {
         bool zeroForOne = true;
 
         _advanceToBlock(0);
-        (uint256 id, ) = _commitAsUser(alice, amount, minOut, zeroForOne, SALT);
+        (uint256 id,) = _commitAsUser(alice, amount, minOut, zeroForOne, SALT);
 
         _advanceToBlock(_windowStart(1));
 
@@ -255,7 +255,7 @@ contract CommitRevealStoreTest is Test {
         bool zeroForOne = true;
 
         _advanceToBlock(0);
-        (uint256 id, ) = _commitAsUser(alice, amount, minOut, zeroForOne, SALT);
+        (uint256 id,) = _commitAsUser(alice, amount, minOut, zeroForOne, SALT);
 
         _advanceToBlock(_windowStart(1));
 
@@ -273,7 +273,7 @@ contract CommitRevealStoreTest is Test {
         bool zeroForOne = true;
 
         _advanceToBlock(0);
-        (uint256 id, ) = _commitAsUser(alice, amount, minOut, zeroForOne, SALT);
+        (uint256 id,) = _commitAsUser(alice, amount, minOut, zeroForOne, SALT);
 
         _advanceToBlock(_windowStart(1));
 
@@ -289,7 +289,7 @@ contract CommitRevealStoreTest is Test {
         bool zeroForOne = true;
 
         _advanceToBlock(0);
-        (uint256 id, ) = _commitAsUser(alice, amount, minOut, zeroForOne, SALT);
+        (uint256 id,) = _commitAsUser(alice, amount, minOut, zeroForOne, SALT);
 
         _advanceToBlock(_windowStart(1));
 
@@ -305,7 +305,7 @@ contract CommitRevealStoreTest is Test {
         bool zeroForOne = true;
 
         _advanceToBlock(0);
-        (uint256 id, ) = _commitAsUser(alice, amount, minOut, zeroForOne, SALT);
+        (uint256 id,) = _commitAsUser(alice, amount, minOut, zeroForOne, SALT);
 
         _advanceToBlock(_windowStart(1));
 
@@ -321,7 +321,7 @@ contract CommitRevealStoreTest is Test {
         bool zeroForOne = true;
 
         _advanceToBlock(0);
-        (uint256 id, ) = _commitAsUser(alice, amount, minOut, zeroForOne, SALT);
+        (uint256 id,) = _commitAsUser(alice, amount, minOut, zeroForOne, SALT);
 
         _advanceToBlock(_windowStart(1));
 
@@ -337,7 +337,7 @@ contract CommitRevealStoreTest is Test {
         bool zeroForOne = true;
 
         _advanceToBlock(0);
-        (uint256 id, ) = _commitAsUser(alice, amount, minOut, zeroForOne, SALT);
+        (uint256 id,) = _commitAsUser(alice, amount, minOut, zeroForOne, SALT);
 
         _advanceToBlock(_windowStart(1));
 
@@ -375,7 +375,7 @@ contract CommitRevealStoreTest is Test {
         bool zeroForOne = true;
 
         _advanceToBlock(0);
-        (uint256 id, ) = _commitAsUser(alice, amount, minOut, zeroForOne, SALT);
+        (uint256 id,) = _commitAsUser(alice, amount, minOut, zeroForOne, SALT);
 
         _advanceToBlock(_windowStart(1));
 
@@ -395,7 +395,7 @@ contract CommitRevealStoreTest is Test {
         bool zeroForOne = true;
 
         _advanceToBlock(0);
-        (uint256 id, ) = _commitAsUser(alice, amount, minOut, zeroForOne, SALT);
+        (uint256 id,) = _commitAsUser(alice, amount, minOut, zeroForOne, SALT);
 
         // Still in window 0 — reveal should fail.
         _advanceToBlock(4); // last block of window 0
@@ -412,7 +412,7 @@ contract CommitRevealStoreTest is Test {
         bool zeroForOne = true;
 
         _advanceToBlock(0);
-        (uint256 id, ) = _commitAsUser(alice, amount, minOut, zeroForOne, SALT);
+        (uint256 id,) = _commitAsUser(alice, amount, minOut, zeroForOne, SALT);
 
         // Advance past window 1 to window 2 (reveal window is W+1 = window 1 only).
         _advanceToBlock(_windowStart(2));
@@ -429,7 +429,7 @@ contract CommitRevealStoreTest is Test {
         bool zeroForOne = true;
 
         _advanceToBlock(0);
-        (uint256 id, ) = _commitAsUser(alice, amount, minOut, zeroForOne, SALT);
+        (uint256 id,) = _commitAsUser(alice, amount, minOut, zeroForOne, SALT);
 
         _advanceToBlock(_windowStart(1));
 
@@ -454,7 +454,7 @@ contract CommitRevealStoreTest is Test {
         bool zeroForOne = true;
 
         _advanceToBlock(0);
-        (uint256 id, ) = _commitAsUser(alice, amount, minOut, zeroForOne, SALT);
+        (uint256 id,) = _commitAsUser(alice, amount, minOut, zeroForOne, SALT);
 
         // Reveal at exactly the first block of window 1.
         _advanceToBlock(5); // block 5 = first block of window 1
@@ -472,7 +472,7 @@ contract CommitRevealStoreTest is Test {
         bool zeroForOne = true;
 
         _advanceToBlock(0);
-        (uint256 id, ) = _commitAsUser(alice, amount, minOut, zeroForOne, SALT);
+        (uint256 id,) = _commitAsUser(alice, amount, minOut, zeroForOne, SALT);
 
         // Reveal at exactly the last block of window 1.
         _advanceToBlock(9); // block 9 = last block of window 1
@@ -494,7 +494,7 @@ contract CommitRevealStoreTest is Test {
         bool zeroForOne = true;
 
         _advanceToBlock(0);
-        (uint256 id, ) = _commitAsUser(alice, amount, minOut, zeroForOne, SALT);
+        (uint256 id,) = _commitAsUser(alice, amount, minOut, zeroForOne, SALT);
 
         // Advance past the reveal window (window 2+).
         _advanceToBlock(_windowStart(2));
@@ -515,7 +515,7 @@ contract CommitRevealStoreTest is Test {
     /// @notice Forfeiture boundary test: forfeiture attempt at exact last block of reveal window fails (Change 3).
     function test_forfeitBond_revert_exactLastBlockOfRevealWindow() public {
         _advanceToBlock(0);
-        (uint256 id, ) = _commitAsUser(alice, 1 ether, DEFAULT_MIN_OUT, true, SALT);
+        (uint256 id,) = _commitAsUser(alice, 1 ether, DEFAULT_MIN_OUT, true, SALT);
 
         // Block 9 = exact last block of reveal window (window 1)
         _advanceToBlock(9);
@@ -527,7 +527,7 @@ contract CommitRevealStoreTest is Test {
     /// @notice Forfeiture boundary test: forfeiture attempt at exact first block after reveal window succeeds (Change 3).
     function test_forfeitBond_exactFirstBlockAfterRevealWindow() public {
         _advanceToBlock(0);
-        (uint256 id, ) = _commitAsUser(alice, 1 ether, DEFAULT_MIN_OUT, true, SALT);
+        (uint256 id,) = _commitAsUser(alice, 1 ether, DEFAULT_MIN_OUT, true, SALT);
 
         // Block 10 = exact first block of window 2 (after reveal window closes)
         _advanceToBlock(10);
@@ -540,7 +540,7 @@ contract CommitRevealStoreTest is Test {
     /// @notice Forfeiture emits BondForfeited event.
     function test_forfeitBond_emitsEvent() public {
         _advanceToBlock(0);
-        (uint256 id, ) = _commitAsUser(alice, 1 ether, DEFAULT_MIN_OUT, true, SALT);
+        (uint256 id,) = _commitAsUser(alice, 1 ether, DEFAULT_MIN_OUT, true, SALT);
 
         _advanceToBlock(_windowStart(2));
 
@@ -556,7 +556,7 @@ contract CommitRevealStoreTest is Test {
         bool zeroForOne = true;
 
         _advanceToBlock(0);
-        (uint256 id, ) = _commitAsUser(alice, amount, minOut, zeroForOne, SALT);
+        (uint256 id,) = _commitAsUser(alice, amount, minOut, zeroForOne, SALT);
 
         _advanceToBlock(_windowStart(1));
         vm.prank(alice);
@@ -571,7 +571,7 @@ contract CommitRevealStoreTest is Test {
     /// @notice Revert: cannot forfeit before the reveal window closes.
     function test_forfeitBond_revert_tooEarly() public {
         _advanceToBlock(0);
-        (uint256 id, ) = _commitAsUser(alice, 1 ether, DEFAULT_MIN_OUT, true, SALT);
+        (uint256 id,) = _commitAsUser(alice, 1 ether, DEFAULT_MIN_OUT, true, SALT);
 
         // Still in the reveal window (window 1).
         _advanceToBlock(_windowStart(1) + 2);
@@ -583,7 +583,7 @@ contract CommitRevealStoreTest is Test {
     /// @notice Revert: cannot forfeit same commitment twice.
     function test_forfeitBond_revert_doubleForfeit() public {
         _advanceToBlock(0);
-        (uint256 id, ) = _commitAsUser(alice, 1 ether, DEFAULT_MIN_OUT, true, SALT);
+        (uint256 id,) = _commitAsUser(alice, 1 ether, DEFAULT_MIN_OUT, true, SALT);
 
         _advanceToBlock(_windowStart(2));
         store.forfeitBond(id);
@@ -607,8 +607,8 @@ contract CommitRevealStoreTest is Test {
     function test_withdrawForfeited_happyPath() public {
         // Create two commitments, both unrevealed, and forfeit both.
         _advanceToBlock(0);
-        (uint256 id1, ) = _commitAsUser(alice, 1 ether, DEFAULT_MIN_OUT, true, keccak256("s1"));
-        (uint256 id2, ) = _commitAsUser(bob, 2 ether, 1.8 ether, false, keccak256("s2"));
+        (uint256 id1,) = _commitAsUser(alice, 1 ether, DEFAULT_MIN_OUT, true, keccak256("s1"));
+        (uint256 id2,) = _commitAsUser(bob, 2 ether, 1.8 ether, false, keccak256("s2"));
 
         _advanceToBlock(_windowStart(2));
         store.forfeitBond(id1);
@@ -630,7 +630,7 @@ contract CommitRevealStoreTest is Test {
     /// @notice withdrawForfeited emits event.
     function test_withdrawForfeited_emitsEvent() public {
         _advanceToBlock(0);
-        (uint256 id, ) = _commitAsUser(alice, 1 ether, DEFAULT_MIN_OUT, true, SALT);
+        (uint256 id,) = _commitAsUser(alice, 1 ether, DEFAULT_MIN_OUT, true, SALT);
 
         _advanceToBlock(_windowStart(2));
         store.forfeitBond(id);
@@ -701,8 +701,8 @@ contract CommitRevealStoreTest is Test {
 
         // Window 0: both commit.
         _advanceToBlock(0);
-        (uint256 idA, ) = _commitAsUser(alice, amountA, minOutA, true, keccak256("saltA"));
-        (uint256 idB, ) = _commitAsUser(bob, amountB, minOutB, false, keccak256("saltB"));
+        (uint256 idA,) = _commitAsUser(alice, amountA, minOutA, true, keccak256("saltA"));
+        (uint256 idB,) = _commitAsUser(bob, amountB, minOutB, false, keccak256("saltB"));
 
         // Window 1: Alice reveals.
         _advanceToBlock(_windowStart(1));
@@ -743,9 +743,11 @@ contract CommitRevealStoreTest is Test {
     ///         reveal at various points in the next window — verifying that the cutoffs
     ///         are exactly right. This catches off-by-one errors.
     function testFuzz_windowBoundary_commitAndReveal(
-        uint8 commitOffsetInWindow,   // offset within the commit window
-        uint8 revealOffsetInWindow    // offset within the reveal window
-    ) public {
+        uint8 commitOffsetInWindow, // offset within the commit window
+        uint8 revealOffsetInWindow // offset within the reveal window
+    )
+        public
+    {
         // Bound to valid offsets within a 5-block window (0..4).
         uint256 commitOffset = bound(commitOffsetInWindow, 0, 4);
         uint256 revealOffset = bound(revealOffsetInWindow, 0, 4);
@@ -833,10 +835,7 @@ contract CommitRevealStoreTest is Test {
     /// @notice Fuzz: bond amounts across a reasonable range. Commit with various bond
     ///         amounts, leave some unrevealed, forfeit them, and verify that the
     ///         forfeited-bonds accounting always sums correctly.
-    function testFuzz_bondAccounting(
-        uint8 numCommitsRaw,
-        uint8 revealBitmapRaw
-    ) public {
+    function testFuzz_bondAccounting(uint8 numCommitsRaw, uint8 revealBitmapRaw) public {
         // Bound: 1..8 commitments.
         uint256 numCommits = bound(numCommitsRaw, 1, 8);
         // The reveal bitmap: bit i == 1 means commitment i will be revealed.
@@ -1000,7 +999,7 @@ contract CommitRevealStoreTest is Test {
     /// @notice Ensure the contract cannot receive plain ETH transfers (no receive/fallback).
     function test_cannotReceivePlainEth() public {
         vm.deal(address(this), 1 ether);
-        (bool ok, ) = address(store).call{value: 1 ether}("");
+        (bool ok,) = address(store).call{value: 1 ether}("");
         assertFalse(ok, "should not accept plain ETH");
     }
 }

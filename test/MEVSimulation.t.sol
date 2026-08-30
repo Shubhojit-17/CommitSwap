@@ -42,11 +42,7 @@ contract MEVSimulationTest is Test, Deployers {
         address hookAddress = address(flags);
 
         testKey = PoolKey({
-            currency0: currency0,
-            currency1: currency1,
-            fee: 3000,
-            tickSpacing: 60,
-            hooks: IHooks(hookAddress)
+            currency0: currency0, currency1: currency1, fee: 3000, tickSpacing: 60, hooks: IHooks(hookAddress)
         });
         testPoolId = testKey.toId();
 
@@ -61,10 +57,7 @@ contract MEVSimulationTest is Test, Deployers {
 
         // Seed 10,000 ETH of liquidity for AMM pool
         IPoolManager.ModifyLiquidityParams memory liqParams = IPoolManager.ModifyLiquidityParams({
-            tickLower: -1200,
-            tickUpper: 1200,
-            liquidityDelta: 10000 ether,
-            salt: 0
+            tickLower: -1200, tickUpper: 1200, liquidityDelta: 10000 ether, salt: 0
         });
         modifyLiquidityRouter.modifyLiquidity(testKey, liqParams, ZERO_BYTES);
 
@@ -104,7 +97,7 @@ contract MEVSimulationTest is Test, Deployers {
     ///         3. Keeper captures attacker's forfeited bond as profit.
     function test_threat_withheldReveal_freeOptionDefense() public {
         uint256 amountAlice = 10 ether; // Alice sells 10 token0 for token1
-        uint256 amountEve = 10 ether;   // Eve sells 10 token1 for token0
+        uint256 amountEve = 10 ether; // Eve sells 10 token1 for token0
 
         uint256 eveEthBefore = eve.balance;
         uint256 keeperEthBefore = keeper.balance;
@@ -113,7 +106,8 @@ contract MEVSimulationTest is Test, Deployers {
 
         // Window 0: Both Alice and Eve commit
         vm.roll(1);
-        bytes32 hashAlice = hook.computeIntentHash(amountAlice, 9 ether, true, PoolId.unwrap(testPoolId), SALT_ALICE, alice);
+        bytes32 hashAlice =
+            hook.computeIntentHash(amountAlice, 9 ether, true, PoolId.unwrap(testPoolId), SALT_ALICE, alice);
         bytes32 hashEve = hook.computeIntentHash(amountEve, 9 ether, false, PoolId.unwrap(testPoolId), SALT_EVE, eve);
 
         vm.prank(alice);
@@ -136,8 +130,14 @@ contract MEVSimulationTest is Test, Deployers {
         assertEq(eveEthBefore - eve.balance, MIN_BOND, "Attacker must lose 100% of bond");
 
         // 2. Alice safely executed via AMM fallback
-        assertEq(MockERC20(Currency.unwrap(currency0)).balanceOf(alice), alice0Before - amountAlice, "Alice token0 spent");
-        assertGe(MockERC20(Currency.unwrap(currency1)).balanceOf(alice) - alice1Before, 9 ether, "Alice received tokens via AMM");
+        assertEq(
+            MockERC20(Currency.unwrap(currency0)).balanceOf(alice), alice0Before - amountAlice, "Alice token0 spent"
+        );
+        assertGe(
+            MockERC20(Currency.unwrap(currency1)).balanceOf(alice) - alice1Before,
+            9 ether,
+            "Alice received tokens via AMM"
+        );
 
         // 3. Keeper received Eve's forfeited bond + 5% fee from Alice's bond
         uint256 expectedKeeperProfit = MIN_BOND + (MIN_BOND * 500 / 10000);

@@ -32,10 +32,7 @@ contract DeployCommitSwapHookScript is Script {
             address(0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f) // Placeholder or Anvil manager
         );
 
-        bytes32 dummyPoolId = vm.envOr(
-            "POOL_ID",
-            bytes32(uint256(0xBEEF))
-        );
+        bytes32 dummyPoolId = vm.envOr("POOL_ID", bytes32(uint256(0xBEEF)));
 
         vm.startBroadcast(deployerPrivateKey);
 
@@ -48,17 +45,10 @@ contract DeployCommitSwapHookScript is Script {
         console.log("--------------------------------------------------");
 
         // Bytecode for CommitSwapHook deployment
-        bytes memory constructorArgs = abi.encode(
-            IPoolManager(poolManagerAddress),
-            dummyPoolId,
-            WINDOW_BLOCKS,
-            MIN_BOND
-        );
+        bytes memory constructorArgs =
+            abi.encode(IPoolManager(poolManagerAddress), dummyPoolId, WINDOW_BLOCKS, MIN_BOND);
 
-        bytes memory creationCode = abi.encodePacked(
-            type(CommitSwapHook).creationCode,
-            constructorArgs
-        );
+        bytes memory creationCode = abi.encodePacked(type(CommitSwapHook).creationCode, constructorArgs);
 
         // Find salt for CREATE2 address matching HOOK_FLAGS
         address deployer = vm.addr(deployerPrivateKey);
@@ -68,18 +58,7 @@ contract DeployCommitSwapHookScript is Script {
         for (uint256 i = 0; i < 100000; i++) {
             salt = bytes32(i);
             predictedHookAddress = address(
-                uint160(
-                    uint256(
-                        keccak256(
-                            abi.encodePacked(
-                                bytes1(0xff),
-                                deployer,
-                                salt,
-                                keccak256(creationCode)
-                            )
-                        )
-                    )
-                )
+                uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), deployer, salt, keccak256(creationCode)))))
             );
 
             if (uint160(predictedHookAddress) & Hooks.ALL_HOOK_MASK == HOOK_FLAGS) {
