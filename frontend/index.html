@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CommitSwap — MEV-Resistant Batch Swaps on Uniswap v4</title>
+  <meta name="description" content="Zero-MEV Commit-Reveal Batch Swap Protocol powered by Uniswap v4 Hooks & Coincidence of Wants (CoW) matching.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
+</head>
+<body>
+  <!-- Ambient background glow effects -->
+  <div class="bg-glow bg-glow-1"></div>
+  <div class="bg-glow bg-glow-2"></div>
+  <div class="bg-glow bg-glow-3"></div>
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="header-content container">
+      <div class="brand">
+        <div class="logo-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-title">CommitSwap</span>
+          <span class="brand-badge">Uniswap v4 Hook</span>
+        </div>
+      </div>
+
+      <div class="header-center">
+        <div class="block-ticker glass-pill">
+          <div class="pulse-dot"></div>
+          <span class="ticker-label">Block:</span>
+          <span id="currentBlockDisplay" class="ticker-value">1,024</span>
+          <span class="ticker-divider">•</span>
+          <span class="ticker-label">Window:</span>
+          <span id="currentWindowDisplay" class="ticker-value">W204</span>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <button id="toggleSimBtn" class="btn btn-secondary glass-btn">
+          <span class="icon">⚡</span> <span id="simModeText">Simulation Mode</span>
+        </button>
+        <button id="connectWalletBtn" class="btn btn-primary">
+          <span id="walletBtnText">Connect Wallet</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="container main-content">
+
+    <!-- Window Pipeline Tracker -->
+    <section class="window-tracker glass-card">
+      <div class="tracker-header">
+        <div>
+          <h2>Window Pipeline</h2>
+          <p class="section-desc">MEV protection through asynchronous 3-stage window pipelining</p>
+        </div>
+        <div class="window-timer-badge">
+          <span class="timer-icon">⏱️</span>
+          <span id="windowProgressText">3 blocks left in Window</span>
+          <div class="progress-bar-container">
+            <div id="windowProgressBar" class="progress-bar-fill" style="width: 40%;"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pipeline-grid">
+        <!-- Stage 1: Commit -->
+        <div class="pipeline-step active-step">
+          <div class="step-badge">Stage 1</div>
+          <div class="step-title-wrap">
+            <h3>Commit Window</h3>
+            <span id="activeCommitWindowTag" class="window-tag current-tag">Window 204</span>
+          </div>
+          <p class="step-desc">Hash preimages submitted on-chain with 0.001 ETH bond. Plaintext is 100% hidden from searchers.</p>
+          <div class="step-stats">
+            <span class="stat-label">Active Commits:</span>
+            <span id="commitCountDisplay" class="stat-val">3 Orders</span>
+          </div>
+        </div>
+
+        <!-- Stage 2: Reveal -->
+        <div class="pipeline-step next-step">
+          <div class="step-badge">Stage 2</div>
+          <div class="step-title-wrap">
+            <h3>Reveal Window</h3>
+            <span id="activeRevealWindowTag" class="window-tag reveal-tag">Window 203</span>
+          </div>
+          <p class="step-desc">Traders publish plaintexts (amount, limit price, salt). Bonds are securely retained until settlement.</p>
+          <div class="step-stats">
+            <span class="stat-label">Revealed:</span>
+            <span id="revealCountDisplay" class="stat-val">2 Orders (66%)</span>
+          </div>
+        </div>
+
+        <!-- Stage 3: Settle -->
+        <div class="pipeline-step settle-step">
+          <div class="step-badge">Stage 3</div>
+          <div class="step-title-wrap">
+            <h3>Settle Batch</h3>
+            <span id="activeSettleWindowTag" class="window-tag settle-tag">Window 202</span>
+          </div>
+          <p class="step-desc">Permissionless keepers execute CoW matching + AMM fallback in a single atomic flash session.</p>
+          <div class="step-stats">
+            <span class="stat-label">Keeper Reward:</span>
+            <span id="keeperRewardEstimate" class="stat-val highlight-green">0.051 ETH</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Interactive Grid: Swap Desk & Order Queue -->
+    <div class="interactive-grid">
+
+      <!-- Left Column: Trading Terminal (Commit & Reveal) -->
+      <section class="trading-terminal glass-card">
+        <div class="tab-header">
+          <button id="tabCommitBtn" class="tab-btn active">1. Commit Order</button>
+          <button id="tabRevealBtn" class="tab-btn">2. Reveal Order <span id="pendingRevealBadge" class="badge-mini">0</span></button>
+          <button id="tabMyOrdersBtn" class="tab-btn">My History</button>
+        </div>
+
+        <!-- Tab 1: Commit Form -->
+        <div id="tabCommitContent" class="tab-content active">
+          <form id="commitForm" onsubmit="return false;">
+            <div class="input-group">
+              <label>You Pay (Token In)</label>
+              <div class="token-input-box">
+                <input type="number" id="inputAmountIn" placeholder="0.0" step="any" required value="10">
+                <div class="token-selector">
+                  <span class="token-icon">🟡</span>
+                  <select id="selectTokenIn">
+                    <option value="token0">Token0 (T0)</option>
+                    <option value="token1">Token1 (T1)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div class="swap-direction-btn-wrap">
+              <button type="button" id="switchDirectionBtn" class="swap-direction-btn">⇅</button>
+            </div>
+
+            <div class="input-group">
+              <label>You Receive (Minimum Amount Out)</label>
+              <div class="token-input-box">
+                <input type="number" id="inputMinAmountOut" placeholder="0.0" step="any" required value="9.8">
+                <div class="token-selector">
+                  <span class="token-icon">🔵</span>
+                  <select id="selectTokenOut">
+                    <option value="token1">Token1 (T1)</option>
+                    <option value="token0">Token0 (T0)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div class="security-card">
+              <div class="security-row">
+                <span>Cryptographic Salt:</span>
+                <span id="displaySalt" class="mono-text">0x7f4a...9b12</span>
+                <button type="button" id="regenSaltBtn" class="btn-link">🎲 New Salt</button>
+              </div>
+              <div class="security-row">
+                <span>Calculated Intent Hash:</span>
+                <span id="displayIntentHash" class="mono-text truncate-hash">0x8a92...1c4f</span>
+              </div>
+              <div class="security-row highlight-row">
+                <span>Required Refundable Bond:</span>
+                <span class="bold">0.001 ETH</span>
+              </div>
+            </div>
+
+            <button type="button" id="submitCommitBtn" class="btn btn-primary btn-block btn-lg">
+              <span>Commit Intent (0.001 ETH Bond)</span>
+            </button>
+          </form>
+        </div>
+
+        <!-- Tab 2: Reveal Form -->
+        <div id="tabRevealContent" class="tab-content">
+          <div class="reveal-instructions">
+            <p>Your commitments awaiting reveal in the current reveal window (<span id="revealWindowIndexRef" class="bold">W203</span>):</p>
+          </div>
+
+          <div id="savedOrdersList" class="orders-list">
+            <!-- Populated via JS -->
+            <div class="empty-orders-state">
+              <span class="empty-icon">📭</span>
+              <p>No active commitments pending reveal in this window.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 3: History -->
+        <div id="tabMyOrdersContent" class="tab-content">
+          <div id="orderHistoryList" class="orders-list">
+            <div class="empty-orders-state">
+              <p>No settled orders yet.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Column: Keeper CoW Match Engine & Batch Settlement Desk -->
+      <section class="keeper-terminal glass-card">
+        <div class="terminal-header">
+          <div class="terminal-title-wrap">
+            <div class="keeper-status-dot"></div>
+            <h2>Keeper Settlement Engine</h2>
+          </div>
+          <span class="badge-accent">Flash Matching</span>
+        </div>
+
+        <p class="section-desc">Simulated Greedy Two-Pointer matching across counterparties with automatic AMM fallback routing for unmatched residuals.</p>
+
+        <!-- Visual CoW Match Preview -->
+        <div class="matching-preview-card">
+          <div class="match-summary-grid">
+            <div class="match-stat">
+              <span class="match-stat-label">CoW Matched Volume:</span>
+              <span id="cowVolumeDisplay" class="match-stat-val text-green">16.0 Token</span>
+            </div>
+            <div class="match-stat">
+              <span class="match-stat-label">AMM Fallback Leg:</span>
+              <span id="ammVolumeDisplay" class="match-stat-val text-yellow">4.0 Token</span>
+            </div>
+            <div class="match-stat">
+              <span class="match-stat-label">Estimated MEV Saved:</span>
+              <span id="mevSavedDisplay" class="match-stat-val text-purple">100% Protected</span>
+            </div>
+            <div class="match-stat">
+              <span class="match-stat-label">Est. Keeper Payout:</span>
+              <span id="keeperPayoutDisplay" class="match-stat-val text-emerald">0.0510 ETH</span>
+            </div>
+          </div>
+
+          <!-- Counterparty Pairing Canvas -->
+          <div class="order-pairs-container">
+            <h4>Live Order Batch (Window <span id="settleWindowRef">202</span>)</h4>
+            <div id="batchOrdersVisual" class="batch-visual-list">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Settle Action -->
+        <div class="settle-action-panel">
+          <button id="advanceBlockBtn" class="btn btn-secondary">
+            <span>⏩ Advance +1 Block</span>
+          </button>
+          <button id="settleBatchBtn" class="btn btn-emerald btn-lg flex-1">
+            <span>⚡ Settle Batch & Claim Fee</span>
+          </button>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- MEV Analytics & Protocol Health Stats -->
+    <section class="analytics-row glass-card">
+      <div class="analytics-item">
+        <span class="analytics-icon">🛡️</span>
+        <div class="analytics-meta">
+          <span class="analytics-title">Front-running / Sandwiching</span>
+          <span class="analytics-value text-emerald">0 Extracted (100% Blocked)</span>
+        </div>
+      </div>
+      <div class="analytics-item">
+        <span class="analytics-icon">🔄</span>
+        <div class="analytics-meta">
+          <span class="analytics-title">Coincidence of Wants Efficiency</span>
+          <span class="analytics-value">84.2% Peer-to-Peer</span>
+        </div>
+      </div>
+      <div class="analytics-item">
+        <span class="analytics-icon">⛽</span>
+        <div class="analytics-meta">
+          <span class="analytics-title">Gas Reduction vs Individual Swaps</span>
+          <span class="analytics-value text-purple">~42% Gas Savings</span>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Notification Toast Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Main JavaScript Logic -->
+  <script src="app.js"></script>
+</body>
+</html>
