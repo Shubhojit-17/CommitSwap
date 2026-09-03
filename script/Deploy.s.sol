@@ -45,20 +45,19 @@ contract DeployCommitSwapHookScript is Script {
         console.log("--------------------------------------------------");
 
         // Bytecode for CommitSwapHook deployment
-        bytes memory constructorArgs =
-            abi.encode(IPoolManager(poolManagerAddress), dummyPoolId, WINDOW_BLOCKS, MIN_BOND);
+        bytes memory constructorArgs = abi.encode(IPoolManager(poolManagerAddress), WINDOW_BLOCKS, MIN_BOND);
 
         bytes memory creationCode = abi.encodePacked(type(CommitSwapHook).creationCode, constructorArgs);
 
-        // Find salt for CREATE2 address matching HOOK_FLAGS
-        address deployer = vm.addr(deployerPrivateKey);
+        address CREATE2_FACTORY = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
+        bytes32 initCodeHash = keccak256(creationCode);
         bytes32 salt;
         address predictedHookAddress;
 
         for (uint256 i = 0; i < 100000; i++) {
             salt = bytes32(i);
             predictedHookAddress = address(
-                uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), deployer, salt, keccak256(creationCode)))))
+                uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), CREATE2_FACTORY, salt, initCodeHash))))
             );
 
             if (uint160(predictedHookAddress) & Hooks.ALL_HOOK_MASK == HOOK_FLAGS) {
@@ -68,17 +67,9 @@ contract DeployCommitSwapHookScript is Script {
             }
         }
 
-        // Deploy via CREATE2 assembly
-        address hookAddress;
-        assembly {
-            hookAddress := create2(0, add(creationCode, 0x20), mload(creationCode), salt)
-        }
-
-        if (hookAddress != address(0)) {
-            console.log("CommitSwapHook successfully deployed at:", hookAddress);
-        } else {
-            console.log("Deployment simulated (CREATE2 address target calculated).");
-        }
+        (bool success,) = CREATE2_FACTORY.call(abi.encodePacked(salt, creationCode));
+        require(success, "CREATE2 deployment failed");
+        console.log("CommitSwapHook successfully deployed at:", predictedHookAddress);
 
         vm.stopBroadcast();
     }

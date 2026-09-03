@@ -35,6 +35,10 @@ contract DeployAndInteractScript is Script {
         console.log("Deployer Address:", deployer);
         console.log("==================================================================");
 
+        if (deployer.balance < 0.1 ether) {
+            vm.deal(deployer, 10 ether);
+        }
+
         vm.startBroadcast(deployerPrivateKey);
 
         // 1. Deploy or resolve PoolManager
@@ -63,99 +67,34 @@ contract DeployAndInteractScript is Script {
         console.log("      Token0 (T0):", address(token0));
         console.log("      Token1 (T1):", address(token1));
 
-        // 3. Mine CREATE2 Salt & Deploy CommitSwapHook with exact poolId
+        // 3. Mine CREATE2 Salt & Deploy CommitSwapHook
         console.log("[3/5] Mining CREATE2 Salt for Hook Address (0x0088 Flags)...");
 
         address CREATE2_FACTORY = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
-        bytes32 salt;
-        address predictedHook;
-        bytes memory constructorArgs;
-        bytes memory creationCode;
+        bytes memory constructorArgs = abi.encode(manager, WINDOW_BLOCKS, MIN_BOND);
+        bytes memory creationCode = abi.encodePacked(type(CommitSwapHook).creationCode, constructorArgs);
+        bytes32 initCodeHash = keccak256(creationCode);
 
-        // Iterate salts to find an address matching HOOK_FLAGS where poolId matches the key
+        bytes32 salt;
+        address hookAddress;
         for (uint256 i = 0; i < 100000; i++) {
             salt = bytes32(i);
-
-            // Temporary address prediction for key calculation
-            address tempPredicted = address(
-                uint160(
-                    uint256(
-                        keccak256(
-                            abi.encodePacked(
-                                bytes1(0xff), CREATE2_FACTORY, salt, keccak256(type(CommitSwapHook).creationCode)
-                            )
-                        )
-                    )
-                )
+            address predicted = address(
+                uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), CREATE2_FACTORY, salt, initCodeHash))))
             );
-
-            PoolKey memory testKey = PoolKey({
-                currency0: currency0, currency1: currency1, fee: 3000, tickSpacing: 60, hooks: IHooks(tempPredicted)
-            });
-            bytes32 calculatedPoolId = PoolId.unwrap(testKey.toId());
-
-            constructorArgs = abi.encode(manager, calculatedPoolId, WINDOW_BLOCKS, MIN_BOND);
-            creationCode = abi.encodePacked(type(CommitSwapHook).creationCode, constructorArgs);
-
-            predictedHook = address(
-                uint160(
-                    uint256(keccak256(abi.encodePacked(bytes1(0xff), CREATE2_FACTORY, salt, keccak256(creationCode))))
-                )
-            );
-
-            if (uint160(predictedHook) & Hooks.ALL_HOOK_MASK == HOOK_FLAGS && predictedHook == tempPredicted) {
+            if (uint160(predicted) & Hooks.ALL_HOOK_MASK == HOOK_FLAGS) {
+                hookAddress = predicted;
                 break;
             }
         }
-
-        // If loop above needed exact match, standard salt miner:
-        if (predictedHook == address(0) || uint160(predictedHook) & Hooks.ALL_HOOK_MASK != HOOK_FLAGS) {
-            for (uint256 i = 0; i < 100000; i++) {
-                salt = bytes32(i);
-                // Calculate dummy for address flags
-                constructorArgs = abi.encode(manager, bytes32(0), WINDOW_BLOCKS, MIN_BOND);
-                creationCode = abi.encodePacked(type(CommitSwapHook).creationCode, constructorArgs);
-                predictedHook = address(
-                    uint160(
-                        uint256(
-                            keccak256(abi.encodePacked(bytes1(0xff), CREATE2_FACTORY, salt, keccak256(creationCode)))
-                        )
-                    )
-                );
-                if (uint160(predictedHook) & Hooks.ALL_HOOK_MASK == HOOK_FLAGS) {
-                    PoolKey memory finalKey = PoolKey({
-                        currency0: currency0,
-                        currency1: currency1,
-                        fee: 3000,
-                        tickSpacing: 60,
-                        hooks: IHooks(predictedHook)
-                    });
-                    bytes32 finalPoolId = PoolId.unwrap(finalKey.toId());
-                    constructorArgs = abi.encode(manager, finalPoolId, WINDOW_BLOCKS, MIN_BOND);
-                    creationCode = abi.encodePacked(type(CommitSwapHook).creationCode, constructorArgs);
-                    predictedHook = address(
-                        uint160(
-                            uint256(
-                                keccak256(
-                                    abi.encodePacked(bytes1(0xff), CREATE2_FACTORY, salt, keccak256(creationCode))
-                                )
-                            )
-                        )
-                    );
-                    if (uint160(predictedHook) & Hooks.ALL_HOOK_MASK == HOOK_FLAGS) {
-                        break;
-                    }
-                }
-            }
-        }
+        require(hookAddress != address(0), "CREATE2 salt mining failed");
 
         (bool success,) = CREATE2_FACTORY.call(abi.encodePacked(salt, creationCode));
         require(success, "CREATE2 deployment failed");
-        address hookAddress = predictedHook;
         console.log("      CommitSwapHook Deployed at:", hookAddress);
         CommitSwapHook hook = CommitSwapHook(payable(hookAddress));
 
-        // 4. Initialize Pool with Hook
+        // 4. Initialize Pool with Hook & Bind PoolId
         console.log("[4/5] Initializing Uniswap v4 Pool with CommitSwapHook...");
         PoolKey memory key = PoolKey({
             currency0: currency0, currency1: currency1, fee: 3000, tickSpacing: 60, hooks: IHooks(hookAddress)
@@ -163,7 +102,8 @@ contract DeployAndInteractScript is Script {
         PoolId poolId = key.toId();
 
         manager.initialize(key, SQRT_PRICE_1_1);
-        console.log("      Pool Initialized! PoolId:", vm.toString(PoolId.unwrap(poolId)));
+        hook.setPoolId(PoolId.unwrap(poolId));
+        console.log("      Pool Initialized & Bound! PoolId:", vm.toString(PoolId.unwrap(poolId)));
 
         // 5. Generate Multi-User On-Chain Activity
         console.log("[5/5] Generating Live Multi-User Batch Activity...");

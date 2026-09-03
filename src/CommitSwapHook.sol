@@ -57,9 +57,9 @@ contract CommitSwapHook is BaseHook, CommitRevealStore, IUnlockCallback {
     // ──────────────────────────────────────────────────────────────────────
     // Constructor
     // ──────────────────────────────────────────────────────────────────────
-    constructor(IPoolManager _poolManager, bytes32 _poolId, uint256 _windowBlocks, uint256 _minBond)
+    constructor(IPoolManager _poolManager, uint256 _windowBlocks, uint256 _minBond)
         BaseHook(_poolManager)
-        CommitRevealStore(_poolId, _windowBlocks, _minBond)
+        CommitRevealStore(_windowBlocks, _minBond)
     {}
 
     // ──────────────────────────────────────────────────────────────────────

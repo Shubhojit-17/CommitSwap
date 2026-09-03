@@ -73,7 +73,7 @@ contract CommitRevealStore {
     uint256 public immutable MIN_BOND;
 
     /// @notice The Uniswap v4 pool identifier associated with this store instance.
-    bytes32 public immutable POOL_ID;
+    bytes32 public POOL_ID;
 
     // ──────────────────────────────────────────────────────────────────────
     // Data structures
@@ -154,6 +154,12 @@ contract CommitRevealStore {
     /// @notice The reveal's poolId does not match this contract's deployed POOL_ID.
     error WrongPool();
 
+    /// @notice Pool ID has already been configured.
+    error PoolAlreadySet();
+
+    /// @notice Pool ID has not been configured yet.
+    error PoolNotSet();
+
     /// @notice The intent hash does not match the stored commitment.
     error HashMismatch();
 
@@ -193,15 +199,21 @@ contract CommitRevealStore {
     // Constructor
     // ──────────────────────────────────────────────────────────────────────
 
-    /// @param _poolId       The Uniswap v4 PoolId associated with this deployment.
     /// @param _windowBlocks Number of blocks per commit window (e.g. 25 for ~50s on Base).
     /// @param _minBond      Minimum bond in native ETH (e.g. 0.001 ether).
-    constructor(bytes32 _poolId, uint256 _windowBlocks, uint256 _minBond) {
+    constructor(uint256 _windowBlocks, uint256 _minBond) {
         require(_windowBlocks > 0, "WINDOW_BLOCKS must be > 0");
         require(_minBond > 0, "MIN_BOND must be > 0");
-        POOL_ID = _poolId;
         WINDOW_BLOCKS = _windowBlocks;
         MIN_BOND = _minBond;
+    }
+
+    /// @notice Set the Uniswap v4 PoolId associated with this store instance.
+    /// @param _poolId The Uniswap v4 PoolId.
+    function setPoolId(bytes32 _poolId) external {
+        if (POOL_ID != bytes32(0)) revert PoolAlreadySet();
+        require(_poolId != bytes32(0), "poolId cannot be zero");
+        POOL_ID = _poolId;
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -291,6 +303,7 @@ contract CommitRevealStore {
         if (currentWindow > c.windowIndex + 1) revert RevealWindowClosed();
 
         // --- Pool identity enforcement ---
+        if (POOL_ID == bytes32(0)) revert PoolNotSet();
         if (poolId != POOL_ID) revert WrongPool();
 
         // --- Hash verification ---

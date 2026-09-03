@@ -31,7 +31,8 @@ contract CommitRevealStoreTest is Test {
     uint256 minBond;
 
     function setUp() public {
-        store = new CommitRevealStore(POOL_ID, 5, 0.001 ether);
+        store = new CommitRevealStore(5, 0.001 ether);
+        store.setPoolId(POOL_ID);
         minBond = store.MIN_BOND();
 
         // Fund test accounts generously.

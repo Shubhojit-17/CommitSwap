@@ -3,13 +3,30 @@
  * Core JavaScript Engine
  */
 
+// CommitSwapHook Uniswap v4 Hook ABI
+const COMMIT_SWAP_HOOK_ABI = [
+  "function commit(bytes32 intentHash) external payable returns (uint256)",
+  "function reveal(uint256 commitmentId, uint256 amount, uint256 minAmountOut, bool zeroForOne, bytes32 poolId, bytes32 salt) external",
+  "function settleBatch(uint256 windowIndex, tuple(address currency0, address currency1, uint24 fee, int24 tickSpacing, address hooks) key) external returns (bytes)",
+  "function currentWindowIndex() external view returns (uint256)",
+  "function getCommitment(uint256 commitmentId) external view returns (tuple(address committer, bytes32 intentHash, uint256 windowIndex, uint256 bondAmount, bool revealed, uint256 amount, uint256 minAmountOut, bool zeroForOne))",
+  "function POOL_ID() external view returns (bytes32)",
+  "function MIN_BOND() external view returns (uint256)",
+  "function WINDOW_BLOCKS() external view returns (uint256)"
+];
+
 // Application State
 const STATE = {
   isSimulationMode: true,
+  isWalletConnected: false,
+  provider: null,
+  signer: null,
+  hookAddress: "0x0000000000000000000000000000000000000088",
+  chainId: null,
   currentBlock: 1024,
   windowBlocks: 5,
   minBondEth: "0.001",
-  walletAddress: "0x328809Bc894f92807417D2dAD6b7C998c1aFdac6", // Default simulated Alice
+  walletAddress: "0x8E1337357Ac77E58c2BbAB77174E07406cB7Acc6", // Connected user address
   poolId: "0x285297f9769b37afc4b76e9eed91605e5ea366378ecf77cdd8d1ab3b19b0c9dd",
   currentSalt: null,
   currentHash: null,
@@ -270,11 +287,48 @@ function renderKeeperMatchingPreview(settleWindowIndex) {
   `).join('');
 }
 
-// User Actions
-window.handleReveal = function(orderId) {
+// User Actions: Reveal
+window.handleReveal = async function(orderId) {
   const order = STATE.orders.find(o => o.id === orderId);
   if (!order) return;
 
+  const hookInput = document.getElementById("targetHookAddress");
+  const targetHook = hookInput ? hookInput.value.trim() : STATE.hookAddress;
+
+  if (STATE.isWalletConnected && STATE.signer && targetHook && targetHook.length === 42 && targetHook !== "0x0000000000000000000000000000000000000088") {
+    try {
+      showToast(`Submitting on-chain reveal for Order #${orderId} to MetaMask...`, "info");
+      const contract = new ethers.Contract(targetHook, COMMIT_SWAP_HOOK_ABI, STATE.signer);
+      const amountWei = ethers.parseEther(order.amount);
+      const minOutWei = ethers.parseEther(order.minAmountOut);
+
+      const tx = await contract.reveal(
+        order.id,
+        amountWei,
+        minOutWei,
+        order.zeroForOne,
+        STATE.poolId,
+        order.salt
+      );
+
+      showToast(`Reveal tx broadcasted: ${tx.hash.slice(0, 10)}... Waiting for block...`, "info");
+      await tx.wait();
+
+      order.revealed = true;
+      showToast(
+        `✅ Revealed Order #${orderId} on Base Sepolia! <a href="https://sepolia.basescan.org/tx/${tx.hash}" target="_blank" style="color:#A7F3D0;text-decoration:underline;">BaseScan ↗</a>`,
+        "success"
+      );
+      updateUI();
+      return;
+    } catch (err) {
+      console.error("Reveal error:", err);
+      showToast(`Reveal transaction reverted: ${err.shortMessage || err.message}`, "warning");
+      return;
+    }
+  }
+
+  // Simulation mode fallback
   order.revealed = true;
   showToast(`Revealed Order #${orderId}! Plaintext published.`, "success");
   updateUI();
@@ -307,8 +361,15 @@ function setupEventListeners() {
   document.getElementById("inputMinAmountOut").addEventListener("input", updateIntentHashPreview);
   document.getElementById("selectTokenIn").addEventListener("change", updateIntentHashPreview);
 
-  // Submit Commit
-  document.getElementById("submitCommitBtn").addEventListener("click", () => {
+  const hookInput = document.getElementById("targetHookAddress");
+  if (hookInput) {
+    hookInput.addEventListener("input", () => {
+      STATE.hookAddress = hookInput.value.trim();
+    });
+  }
+
+  // Submit Commit (Web3 + Simulator Fallback)
+  document.getElementById("submitCommitBtn").addEventListener("click", async () => {
     const amountIn = document.getElementById("inputAmountIn").value;
     const minOut = document.getElementById("inputMinAmountOut").value;
     const zeroForOne = document.getElementById("selectTokenIn").value === "token0";
@@ -319,6 +380,51 @@ function setupEventListeners() {
       return;
     }
 
+    const targetHook = hookInput ? hookInput.value.trim() : STATE.hookAddress;
+
+    // Real On-Chain Execution when MetaMask is connected
+    if (STATE.isWalletConnected && STATE.signer && targetHook && targetHook.length === 42 && targetHook !== "0x0000000000000000000000000000000000000088") {
+      try {
+        showToast("Sending commit to MetaMask with 0.001 ETH bond...", "info");
+        const contract = new ethers.Contract(targetHook, COMMIT_SWAP_HOOK_ABI, STATE.signer);
+
+        const tx = await contract.commit(STATE.currentHash, {
+          value: ethers.parseEther(STATE.minBondEth)
+        });
+
+        showToast(`Commit broadcasted: ${tx.hash.slice(0, 10)}... Confirming...`, "info");
+        await tx.wait();
+
+        showToast(
+          `✅ Confirmed on Base Sepolia! <a href="https://sepolia.basescan.org/tx/${tx.hash}" target="_blank" style="color:#A7F3D0;text-decoration:underline;">BaseScan ↗</a>`,
+          "success"
+        );
+
+        const newOrder = {
+          id: STATE.orders.length,
+          committer: STATE.walletAddress,
+          windowIndex: currentWindow,
+          amount: amountIn,
+          minAmountOut: minOut,
+          zeroForOne: zeroForOne,
+          salt: STATE.currentSalt,
+          bondAmount: STATE.minBondEth,
+          revealed: false,
+          settled: false,
+          txHash: tx.hash
+        };
+        STATE.orders.push(newOrder);
+        initSalt();
+        updateUI();
+        return;
+      } catch (err) {
+        console.error("On-chain commit error:", err);
+        showToast(`Commit transaction error: ${err.shortMessage || err.message}`, "warning");
+        return;
+      }
+    }
+
+    // Fallback Simulated Execution
     const newOrder = {
       id: STATE.orders.length,
       committer: STATE.walletAddress,
@@ -333,7 +439,7 @@ function setupEventListeners() {
     };
 
     STATE.orders.push(newOrder);
-    showToast(`Committed ${amountIn} tokens with 0.001 ETH bond for Window ${currentWindow}!`, "success");
+    showToast(`Committed ${amountIn} tokens with 0.001 ETH bond (Simulated Window ${currentWindow})!`, "success");
     initSalt();
     updateUI();
   });
@@ -356,24 +462,68 @@ function setupEventListeners() {
     }
 
     toSettle.forEach(o => o.settled = true);
-    showToast(`⚡ Settled Batch for Window ${settleWindow}! Keeper payout distributed.`, "success");
+    showToast(`⚡ Settled Batch for Window ${settleWindow}! Keeper fee cut applied.`, "success");
     updateUI();
   });
 
-  // Connect Wallet
+  // Connect Wallet (MetaMask Base Sepolia Provider)
   document.getElementById("connectWalletBtn").addEventListener("click", async () => {
     if (window.ethereum) {
       try {
-        const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const network = await provider.getNetwork();
+        STATE.chainId = Number(network.chainId);
+
+        // Check or Switch to Base Sepolia (84532)
+        if (STATE.chainId !== 84532) {
+          try {
+            await window.ethereum.request({
+              method: "wallet_switchEthereumChain",
+              params: [{ chainId: "0x14a34" }] // 84532 in hex
+            });
+          } catch (switchError) {
+            if (switchError.code === 4902) {
+              await window.ethereum.request({
+                method: "wallet_addEthereumChain",
+                params: [{
+                  chainId: "0x14a34",
+                  chainName: "Base Sepolia",
+                  nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
+                  rpcUrls: ["https://sepolia.base.org"],
+                  blockExplorerUrls: ["https://sepolia.basescan.org"]
+                }]
+              });
+            }
+          }
+        }
+
+        const accounts = await provider.send("eth_requestAccounts", []);
         if (accounts.length > 0) {
           STATE.walletAddress = accounts[0];
+          STATE.isWalletConnected = true;
+          STATE.provider = provider;
+          STATE.signer = await provider.getSigner();
+
+          try {
+            const blockNum = await provider.getBlockNumber();
+            STATE.currentBlock = blockNum;
+          } catch (e) {
+            console.warn("Could not read block number:", e);
+          }
+
           document.getElementById("walletBtnText").textContent =
             accounts[0].slice(0, 6) + "..." + accounts[0].slice(-4);
-          showToast(`Connected wallet: ${accounts[0].slice(0, 6)}...`, "success");
+          document.getElementById("simModeText").textContent = "Base Sepolia Live";
+          document.getElementById("toggleSimBtn").style.background = "rgba(16, 185, 129, 0.2)";
+          document.getElementById("toggleSimBtn").style.borderColor = "rgba(16, 185, 129, 0.4)";
+          STATE.isSimulationMode = false;
+
+          showToast(`Connected to Base Sepolia: ${accounts[0].slice(0, 6)}...`, "success");
           updateIntentHashPreview();
           updateUI();
         }
       } catch (err) {
+        console.error("Wallet error:", err);
         showToast("Wallet connection declined.", "warning");
       }
     } else {
@@ -398,5 +548,5 @@ function showToast(message, type = "info") {
   setTimeout(() => {
     toast.style.opacity = "0";
     setTimeout(() => toast.remove(), 300);
-  }, 4000);
+  }, 5000);
 }

@@ -162,6 +162,29 @@ body {
   font-size: 0.85rem;
 }
 
+.contract-pill {
+  padding: 6px 14px;
+  gap: 8px;
+}
+
+.hook-address-input {
+  background: transparent;
+  border: none;
+  color: var(--text-main);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  width: 140px;
+  outline: none;
+  transition: width 0.2s ease, background 0.2s ease;
+}
+
+.hook-address-input:focus {
+  width: 280px;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
 .pulse-dot {
   width: 8px;
   height: 8px;

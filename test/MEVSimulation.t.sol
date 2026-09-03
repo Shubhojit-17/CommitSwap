@@ -46,12 +46,9 @@ contract MEVSimulationTest is Test, Deployers {
         });
         testPoolId = testKey.toId();
 
-        deployCodeTo(
-            "CommitSwapHook.sol:CommitSwapHook",
-            abi.encode(manager, PoolId.unwrap(testPoolId), WINDOW_BLOCKS, MIN_BOND),
-            hookAddress
-        );
+        deployCodeTo("CommitSwapHook.sol:CommitSwapHook", abi.encode(manager, WINDOW_BLOCKS, MIN_BOND), hookAddress);
         hook = CommitSwapHook(payable(hookAddress));
+        hook.setPoolId(PoolId.unwrap(testPoolId));
 
         manager.initialize(testKey, SQRT_PRICE_1_1);
 
