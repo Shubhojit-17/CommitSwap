@@ -531,7 +531,7 @@ function setupTradeHandlers() {
     });
   });
 
-  // Submit Commit (Live On-Chain via MetaMask)
+  // Submit Commit (100% Real On-Chain via MetaMask)
   document.getElementById("tradeSubmitCommitBtn")?.addEventListener("click", async () => {
     const amountIn = document.getElementById("tradeInputAmountIn").value;
     const minOut = document.getElementById("tradeInputMinOut").value;
@@ -543,108 +543,131 @@ function setupTradeHandlers() {
       return;
     }
 
-    // If MetaMask is connected
-    if (STATE.isWalletConnected && STATE.signer) {
-      try {
-        showToast("Sending commit to MetaMask with 0.001 ETH bond...", "info");
-        const hookContract = new ethers.Contract(STATE.hookAddress, COMMIT_SWAP_HOOK_ABI, STATE.signer);
-        
-        const tx = await hookContract.commit(STATE.currentHash, {
-          value: ethers.parseEther("0.001")
-        });
-
-        showToast(`Tx broadcasted: ${tx.hash.slice(0, 10)}... Confirming...`, "info");
-        await tx.wait();
-
-        showToast(
-          `✅ Commit Confirmed on Base Sepolia! <a href="https://sepolia.basescan.org/tx/${tx.hash}" target="_blank" style="color:#6ee7b7;text-decoration:underline;">BaseScan ↗</a>`,
-          "success"
-        );
-
-        STATE.orders.push({
-          id: STATE.orders.length,
-          committer: STATE.walletAddress,
-          windowIndex: currentWindow,
-          amount: amountIn,
-          minAmountOut: minOut,
-          zeroForOne: zeroForOne,
-          salt: STATE.currentSalt,
-          bondAmount: "0.001",
-          revealed: false,
-          settled: false,
-          txHash: tx.hash
-        });
-
-        initSalt();
-        updateUI();
-        return;
-      } catch (err) {
-        console.error("Commit error:", err);
-        showToast(`MetaMask rejected or reverted: ${err.shortMessage || err.message}`, "warning");
-        return;
-      }
+    if (!STATE.isWalletConnected || !STATE.signer) {
+      showToast("Please connect your MetaMask wallet on Base Sepolia first.", "warning");
+      document.getElementById("connectWalletBtn")?.click();
+      return;
     }
 
-    // Simulator Mode Fallback
-    STATE.orders.push({
-      id: STATE.orders.length,
-      committer: STATE.walletAddress,
-      windowIndex: currentWindow,
-      amount: amountIn,
-      minAmountOut: minOut,
-      zeroForOne: zeroForOne,
-      salt: STATE.currentSalt,
-      bondAmount: "0.001",
-      revealed: false,
-      settled: false,
-      txHash: "0x" + Array.from(new Uint8Array(32), b => b.toString(16).padStart(2, '0')).join('')
-    });
-    showToast(`Committed ${amountIn} tokens with 0.001 ETH bond (Simulated W${currentWindow})`, "success");
-    initSalt();
-    updateUI();
+    if (STATE.hookAddress === ethers.ZeroAddress || STATE.hookAddress === "0x0000000000000000000000000000000000000088") {
+      showToast("Notice: Hook contract must be deployed on Base Sepolia before committing.", "warning");
+    }
+
+    try {
+      showToast("Submitting commit to MetaMask with 0.001 ETH bond on Base Sepolia...", "info");
+      const hookContract = new ethers.Contract(STATE.hookAddress, COMMIT_SWAP_HOOK_ABI, STATE.signer);
+      
+      const tx = await hookContract.commit(STATE.currentHash, {
+        value: ethers.parseEther("0.001")
+      });
+
+      showToast(`Tx broadcasted: ${tx.hash.slice(0, 10)}... Confirming on Base Sepolia...`, "info");
+      const receipt = await tx.wait();
+
+      showToast(
+        `✅ Commit Confirmed on Base Sepolia! <a href="https://sepolia.basescan.org/tx/${tx.hash}" target="_blank" style="color:#6ee7b7;text-decoration:underline;">BaseScan ↗</a>`,
+        "success"
+      );
+
+      const newOrder = {
+        id: STATE.orders.length,
+        committer: STATE.walletAddress,
+        windowIndex: currentWindow,
+        amount: amountIn,
+        minAmountOut: minOut,
+        zeroForOne: zeroForOne,
+        salt: STATE.currentSalt,
+        bondAmount: "0.001",
+        revealed: false,
+        settled: false,
+        txHash: tx.hash
+      };
+
+      STATE.orders.push(newOrder);
+
+      // Sync with backend daemon
+      try {
+        await fetch("http://localhost:3001/api/orders/commit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            committer: STATE.walletAddress,
+            amount: amountIn,
+            minAmountOut: minOut,
+            zeroForOne: zeroForOne,
+            salt: STATE.currentSalt,
+            txHash: tx.hash,
+            windowIndex: currentWindow
+          })
+        });
+      } catch (err) {
+        console.warn("Backend sync notice:", err);
+      }
+
+      initSalt();
+      updateUI();
+    } catch (err) {
+      console.error("On-chain commit error:", err);
+      showToast(`Transaction rejected or reverted: ${err.shortMessage || err.message}`, "warning");
+    }
   });
 }
 
-// Reveal Action Handler
+// Reveal Action Handler (100% Real On-Chain via MetaMask)
 window.handleReveal = async function(orderId) {
   const order = STATE.orders.find(o => o.id === orderId);
   if (!order) return;
 
-  if (STATE.isWalletConnected && STATE.signer) {
-    try {
-      showToast(`Submitting reveal for Order #${orderId} to MetaMask...`, "info");
-      const hookContract = new ethers.Contract(STATE.hookAddress, COMMIT_SWAP_HOOK_ABI, STATE.signer);
-      
-      const tx = await hookContract.reveal(
-        order.id,
-        ethers.parseEther(order.amount),
-        ethers.parseEther(order.minAmountOut),
-        order.zeroForOne,
-        STATE.poolId,
-        order.salt
-      );
-
-      showToast(`Reveal tx: ${tx.hash.slice(0, 10)}... Confirming...`, "info");
-      await tx.wait();
-
-      order.revealed = true;
-      showToast(
-        `✅ Revealed Order #${orderId} on Base Sepolia! <a href="https://sepolia.basescan.org/tx/${tx.hash}" target="_blank" style="color:#6ee7b7;text-decoration:underline;">BaseScan ↗</a>`,
-        "success"
-      );
-      updateUI();
-      return;
-    } catch (err) {
-      console.error("Reveal error:", err);
-      showToast(`Reveal error: ${err.shortMessage || err.message}`, "warning");
-      return;
-    }
+  if (!STATE.isWalletConnected || !STATE.signer) {
+    showToast("Please connect your MetaMask wallet on Base Sepolia first.", "warning");
+    document.getElementById("connectWalletBtn")?.click();
+    return;
   }
 
-  // Simulation mode
-  order.revealed = true;
-  showToast(`Revealed Order #${orderId}! Plaintext published on-chain.`, "success");
-  updateUI();
+  try {
+    showToast(`Submitting reveal for Order #${orderId} to MetaMask...`, "info");
+    const hookContract = new ethers.Contract(STATE.hookAddress, COMMIT_SWAP_HOOK_ABI, STATE.signer);
+    
+    const tx = await hookContract.reveal(
+      order.id,
+      ethers.parseEther(order.amount),
+      ethers.parseEther(order.minAmountOut),
+      order.zeroForOne,
+      STATE.poolId,
+      order.salt
+    );
+
+    showToast(`Reveal tx: ${tx.hash.slice(0, 10)}... Confirming on Base Sepolia...`, "info");
+    await tx.wait();
+
+    order.revealed = true;
+    showToast(
+      `✅ Revealed Order #${orderId} on Base Sepolia! <a href="https://sepolia.basescan.org/tx/${tx.hash}" target="_blank" style="color:#6ee7b7;text-decoration:underline;">BaseScan ↗</a>`,
+      "success"
+    );
+
+    // Sync with backend daemon
+    try {
+      await fetch("http://localhost:3001/api/orders/reveal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: order.id,
+          amount: order.amount,
+          minAmountOut: order.minAmountOut,
+          zeroForOne: order.zeroForOne,
+          salt: order.salt
+        })
+      });
+    } catch (err) {
+      console.warn("Backend sync notice:", err);
+    }
+
+    updateUI();
+  } catch (err) {
+    console.error("On-chain reveal error:", err);
+    showToast(`Reveal error: ${err.shortMessage || err.message}`, "warning");
+  }
 };
 
 // Execution & Keeper Handlers
@@ -701,60 +724,98 @@ function setupExecutionHandlers() {
   });
 }
 
-// Wallet Handler
+// EIP-6963 Multi-Wallet Announcer (MetaMask Specific)
+let detectedMetaMaskProvider = null;
+window.addEventListener("eip6963:announceProvider", (event) => {
+  const info = event.detail.info;
+  if (info.rdns === "io.metamask" || info.name.toLowerCase().includes("metamask")) {
+    detectedMetaMaskProvider = event.detail.provider;
+    console.log("[Wallet] EIP-6963 MetaMask captured:", info.name);
+  }
+});
+window.dispatchEvent(new Event("eip6963:requestProvider"));
+
+function getStrictMetaMaskProvider() {
+  if (detectedMetaMaskProvider) return detectedMetaMaskProvider;
+
+  if (typeof window.ethereum !== "undefined") {
+    if (window.ethereum.providers && Array.isArray(window.ethereum.providers)) {
+      const mm = window.ethereum.providers.find(p => p.isMetaMask && !p.isOkxWallet && !p.isPhantom);
+      if (mm) return mm;
+      const mmFallback = window.ethereum.providers.find(p => p.isMetaMask && !p.isOkxWallet);
+      if (mmFallback) return mmFallback;
+    }
+
+    if (window.ethereum.isMetaMask && !window.ethereum.isOkxWallet) {
+      return window.ethereum;
+    }
+  }
+  return null;
+}
+
+// Wallet Handler (100% MetaMask Only)
 function setupWalletHandler() {
   document.getElementById("connectWalletBtn")?.addEventListener("click", async () => {
-    if (window.ethereum) {
-      try {
-        const provider = new ethers.BrowserProvider(window.ethereum);
-        const network = await provider.getNetwork();
-        STATE.chainId = Number(network.chainId);
+    const rawProvider = getStrictMetaMaskProvider();
 
-        // Switch to Base Sepolia (84532)
-        if (STATE.chainId !== 84532) {
-          try {
-            await window.ethereum.request({
-              method: "wallet_switchEthereumChain",
-              params: [{ chainId: "0x14a34" }]
+    if (!rawProvider) {
+      if (typeof window.ethereum !== "undefined" && window.ethereum.isOkxWallet) {
+        showToast("⚠️ OKX Wallet detected as default! Please set MetaMask as default in your extension settings.", "warning");
+      } else {
+        showToast("MetaMask extension not detected. Please install and unlock MetaMask.", "warning");
+      }
+      return;
+    }
+
+    try {
+      showToast("Connecting to MetaMask...", "info");
+      const provider = new ethers.BrowserProvider(rawProvider);
+      const network = await provider.getNetwork();
+      STATE.chainId = Number(network.chainId);
+
+      // Switch or Add Base Sepolia (84532)
+      if (STATE.chainId !== 84532) {
+        try {
+          await rawProvider.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: "0x14a34" }]
+          });
+        } catch (switchErr) {
+          if (switchErr.code === 4902) {
+            await rawProvider.request({
+              method: "wallet_addEthereumChain",
+              params: [{
+                chainId: "0x14a34",
+                chainName: "Base Sepolia",
+                nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
+                rpcUrls: ["https://sepolia.base.org"],
+                blockExplorerUrls: ["https://sepolia.basescan.org"]
+              }]
             });
-          } catch (switchErr) {
-            if (switchErr.code === 4902) {
-              await window.ethereum.request({
-                method: "wallet_addEthereumChain",
-                params: [{
-                  chainId: "0x14a34",
-                  chainName: "Base Sepolia",
-                  nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
-                  rpcUrls: ["https://sepolia.base.org"],
-                  blockExplorerUrls: ["https://sepolia.basescan.org"]
-                }]
-              });
-            }
           }
         }
-
-        const accounts = await provider.send("eth_requestAccounts", []);
-        if (accounts.length > 0) {
-          STATE.walletAddress = accounts[0];
-          STATE.isWalletConnected = true;
-          STATE.provider = provider;
-          STATE.signer = await provider.getSigner();
-
-          const balWei = await provider.getBalance(accounts[0]);
-          STATE.ethBalance = parseFloat(ethers.formatEther(balWei)).toFixed(4);
-
-          document.getElementById("walletBtnText").textContent =
-            `${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)} (${STATE.ethBalance} ETH)`;
-          
-          showToast(`Connected to Base Sepolia: ${accounts[0].slice(0, 6)}...`, "success");
-          updateTradeHashPreview();
-          updateUI();
-        }
-      } catch (err) {
-        showToast("Wallet connection declined.", "warning");
       }
-    } else {
-      showToast("MetaMask not detected. Install MetaMask to execute live on-chain.", "info");
+
+      const accounts = await rawProvider.request({ method: "eth_requestAccounts" });
+      if (accounts && accounts.length > 0) {
+        STATE.walletAddress = accounts[0];
+        STATE.isWalletConnected = true;
+        STATE.provider = provider;
+        STATE.signer = await provider.getSigner();
+
+        const balWei = await provider.getBalance(accounts[0]);
+        STATE.ethBalance = parseFloat(ethers.formatEther(balWei)).toFixed(4);
+
+        document.getElementById("walletBtnText").textContent =
+          `${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)} (${STATE.ethBalance} ETH)`;
+        
+        showToast(`Connected MetaMask on Base Sepolia: ${accounts[0].slice(0, 6)}...`, "success");
+        updateTradeHashPreview();
+        updateUI();
+      }
+    } catch (err) {
+      console.error("MetaMask connection error:", err);
+      showToast("MetaMask connection declined or cancelled.", "warning");
     }
   });
 }
