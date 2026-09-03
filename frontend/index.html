@@ -3,303 +3,726 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CommitSwap — MEV-Resistant Batch Swaps on Uniswap v4</title>
-  <meta name="description" content="Zero-MEV Commit-Reveal Batch Swap Protocol powered by Uniswap v4 Hooks & Coincidence of Wants (CoW) matching.">
+  <title>CommitSwap — Uniswap v4 MEV-Resistant Batch Trading</title>
+  <meta name="description" content="Decentralized MEV-resistant batch trading terminal on Uniswap v4 using commit-reveal cryptography and flash accounting.">
+
+  <!-- Google Fonts: Inter & JetBrains Mono -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Ethers.js v6 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js"></script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Chart.js for Pro Analytics -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
   <link rel="stylesheet" href="style.css">
-  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
 </head>
-<body>
-  <!-- Ambient background glow effects -->
-  <div class="bg-glow bg-glow-1"></div>
-  <div class="bg-glow bg-glow-2"></div>
-  <div class="bg-glow bg-glow-3"></div>
+<body class="dark-theme">
 
-  <!-- Header -->
-  <header class="app-header">
-    <div class="header-content container">
-      <div class="brand">
-        <div class="logo-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+  <div class="app-layout">
+    <!-- Desktop & Mobile Sidebar Navigation (Onyx Architecture) -->
+    <aside class="app-sidebar" id="appSidebar">
+      <div class="sidebar-header">
+        <div class="brand-badge-logo">
+          <span class="logo-text">C</span>
         </div>
-        <div class="brand-text">
-          <span class="brand-title">CommitSwap</span>
-          <span class="brand-badge">Uniswap v4 Hook</span>
+        <div class="brand-info">
+          <span class="brand-title">COMMIT<span class="text-cobalt">SWAP</span></span>
+          <span class="brand-sub">Uniswap v4 Hook</span>
         </div>
       </div>
 
-      <div class="header-center">
-        <div class="block-ticker glass-pill">
-          <div class="pulse-dot"></div>
-          <span class="ticker-label">Block:</span>
-          <span id="currentBlockDisplay" class="ticker-value">1,024</span>
-          <span class="ticker-divider">•</span>
-          <span class="ticker-label">Window:</span>
-          <span id="currentWindowDisplay" class="ticker-value">W204</span>
-        </div>
-      </div>
-
-      <div class="header-actions">
-        <div class="contract-pill glass-pill" title="Target Hook Contract on Base Sepolia">
-          <span class="icon">📍</span>
-          <span class="ticker-label">Hook:</span>
-          <input type="text" id="targetHookAddress" placeholder="Hook Address 0x..." class="hook-address-input" value="0x0000000000000000000000000000000000000088" />
-        </div>
-        <button id="toggleSimBtn" class="btn btn-secondary glass-btn">
-          <span class="icon">⚡</span> <span id="simModeText">Simulation Mode</span>
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-page="overview">
+          <i data-lucide="layout-dashboard" class="nav-icon"></i>
+          <span class="nav-label">Overview</span>
         </button>
-        <button id="connectWalletBtn" class="btn btn-primary">
-          <span id="walletBtnText">Connect Wallet</span>
+        <button class="nav-item" data-page="trade">
+          <i data-lucide="arrow-left-right" class="nav-icon"></i>
+          <span class="nav-label">Trade & Commit</span>
         </button>
-      </div>
-    </div>
-  </header>
+        <button class="nav-item" data-page="execution">
+          <i data-lucide="zap" class="nav-icon"></i>
+          <span class="nav-label">Batch Execution</span>
+          <span class="badge-accent mini" id="sidebarBatchBadge">W-2</span>
+        </button>
+        <button class="nav-item" data-page="vault">
+          <i data-lucide="vault" class="nav-icon"></i>
+          <span class="nav-label">Liquidity & Vault</span>
+        </button>
+        <button class="nav-item" data-page="analytics">
+          <i data-lucide="bar-chart-3" class="nav-icon"></i>
+          <span class="nav-label">MEV Analytics</span>
+        </button>
+        <button class="nav-item" data-page="history">
+          <i data-lucide="history" class="nav-icon"></i>
+          <span class="nav-label">On-Chain History</span>
+        </button>
+        <button class="nav-item" data-page="settings">
+          <i data-lucide="settings" class="nav-icon"></i>
+          <span class="nav-label">Contracts & Hub</span>
+        </button>
+      </nav>
 
-  <!-- Main Container -->
-  <main class="container main-content">
-
-    <!-- Window Pipeline Tracker -->
-    <section class="window-tracker glass-card">
-      <div class="tracker-header">
-        <div>
-          <h2>Window Pipeline</h2>
-          <p class="section-desc">MEV protection through asynchronous 3-stage window pipelining</p>
-        </div>
-        <div class="window-timer-badge">
-          <span class="timer-icon">⏱️</span>
-          <span id="windowProgressText">3 blocks left in Window</span>
-          <div class="progress-bar-container">
-            <div id="windowProgressBar" class="progress-bar-fill" style="width: 40%;"></div>
+      <div class="sidebar-footer">
+        <div class="network-status-box">
+          <div class="status-indicator live"></div>
+          <div class="status-text">
+            <span class="status-title">Base Sepolia</span>
+            <span class="status-subtitle" id="sidebarBlockNumber">Block #...</span>
           </div>
         </div>
       </div>
+    </aside>
 
-      <div class="pipeline-grid">
-        <!-- Stage 1: Commit -->
-        <div class="pipeline-step active-step">
-          <div class="step-badge">Stage 1</div>
-          <div class="step-title-wrap">
-            <h3>Commit Window</h3>
-            <span id="activeCommitWindowTag" class="window-tag current-tag">Window 204</span>
-          </div>
-          <p class="step-desc">Hash preimages submitted on-chain with 0.001 ETH bond. Plaintext is 100% hidden from searchers.</p>
-          <div class="step-stats">
-            <span class="stat-label">Active Commits:</span>
-            <span id="commitCountDisplay" class="stat-val">3 Orders</span>
-          </div>
-        </div>
-
-        <!-- Stage 2: Reveal -->
-        <div class="pipeline-step next-step">
-          <div class="step-badge">Stage 2</div>
-          <div class="step-title-wrap">
-            <h3>Reveal Window</h3>
-            <span id="activeRevealWindowTag" class="window-tag reveal-tag">Window 203</span>
-          </div>
-          <p class="step-desc">Traders publish plaintexts (amount, limit price, salt). Bonds are securely retained until settlement.</p>
-          <div class="step-stats">
-            <span class="stat-label">Revealed:</span>
-            <span id="revealCountDisplay" class="stat-val">2 Orders (66%)</span>
+    <!-- Main App Container -->
+    <div class="main-wrapper">
+      <!-- Top Header (Onyx Architecture) -->
+      <header class="app-topbar">
+        <div class="topbar-left">
+          <button id="sidebarToggleBtn" class="mobile-toggle-btn">
+            <i data-lucide="menu"></i>
+          </button>
+          <div class="breadcrumb-wrap">
+            <span class="breadcrumb-root">Protocol</span>
+            <i data-lucide="chevron-right" class="breadcrumb-arrow"></i>
+            <span class="breadcrumb-current" id="pageTitleDisplay">Overview Dashboard</span>
           </div>
         </div>
 
-        <!-- Stage 3: Settle -->
-        <div class="pipeline-step settle-step">
-          <div class="step-badge">Stage 3</div>
-          <div class="step-title-wrap">
-            <h3>Settle Batch</h3>
-            <span id="activeSettleWindowTag" class="window-tag settle-tag">Window 202</span>
+        <div class="topbar-right">
+          <!-- Live Gas & Window Tracker -->
+          <div class="ticker-pill">
+            <i data-lucide="flame" class="ticker-icon text-amber"></i>
+            <span class="ticker-text">Gas: <strong id="headerGasPrice">0.006 Gwei</strong></span>
           </div>
-          <p class="step-desc">Permissionless keepers execute CoW matching + AMM fallback in a single atomic flash session.</p>
-          <div class="step-stats">
-            <span class="stat-label">Keeper Reward:</span>
-            <span id="keeperRewardEstimate" class="stat-val highlight-green">0.051 ETH</span>
+
+          <div class="ticker-pill">
+            <i data-lucide="timer" class="ticker-icon text-cobalt"></i>
+            <span class="ticker-text">Window: <strong id="headerWindowIndex">W...</strong></span>
           </div>
-        </div>
-      </div>
-    </section>
 
-    <!-- Interactive Grid: Swap Desk & Order Queue -->
-    <div class="interactive-grid">
+          <!-- Base Sepolia Network Pill -->
+          <div class="network-badge-pill">
+            <span class="pulse-dot"></span>
+            <span>Base Sepolia</span>
+          </div>
 
-      <!-- Left Column: Trading Terminal (Commit & Reveal) -->
-      <section class="trading-terminal glass-card">
-        <div class="tab-header">
-          <button id="tabCommitBtn" class="tab-btn active">1. Commit Order</button>
-          <button id="tabRevealBtn" class="tab-btn">2. Reveal Order <span id="pendingRevealBadge" class="badge-mini">0</span></button>
-          <button id="tabMyOrdersBtn" class="tab-btn">My History</button>
-        </div>
-
-        <!-- Tab 1: Commit Form -->
-        <div id="tabCommitContent" class="tab-content active">
-          <form id="commitForm" onsubmit="return false;">
-            <div class="input-group">
-              <label>You Pay (Token In)</label>
-              <div class="token-input-box">
-                <input type="number" id="inputAmountIn" placeholder="0.0" step="any" required value="10">
-                <div class="token-selector">
-                  <span class="token-icon">🟡</span>
-                  <select id="selectTokenIn">
-                    <option value="token0">Token0 (T0)</option>
-                    <option value="token1">Token1 (T1)</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <div class="swap-direction-btn-wrap">
-              <button type="button" id="switchDirectionBtn" class="swap-direction-btn">⇅</button>
-            </div>
-
-            <div class="input-group">
-              <label>You Receive (Minimum Amount Out)</label>
-              <div class="token-input-box">
-                <input type="number" id="inputMinAmountOut" placeholder="0.0" step="any" required value="9.8">
-                <div class="token-selector">
-                  <span class="token-icon">🔵</span>
-                  <select id="selectTokenOut">
-                    <option value="token1">Token1 (T1)</option>
-                    <option value="token0">Token0 (T0)</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <div class="security-card">
-              <div class="security-row">
-                <span>Cryptographic Salt:</span>
-                <span id="displaySalt" class="mono-text">0x7f4a...9b12</span>
-                <button type="button" id="regenSaltBtn" class="btn-link">🎲 New Salt</button>
-              </div>
-              <div class="security-row">
-                <span>Calculated Intent Hash:</span>
-                <span id="displayIntentHash" class="mono-text truncate-hash">0x8a92...1c4f</span>
-              </div>
-              <div class="security-row highlight-row">
-                <span>Required Refundable Bond:</span>
-                <span class="bold">0.001 ETH</span>
-              </div>
-            </div>
-
-            <button type="button" id="submitCommitBtn" class="btn btn-primary btn-block btn-lg">
-              <span>Commit Intent (0.001 ETH Bond)</span>
+          <!-- Connect Wallet Button / User Pill -->
+          <div class="wallet-btn-container">
+            <button id="connectWalletBtn" class="btn btn-primary">
+              <i data-lucide="wallet" class="btn-icon"></i>
+              <span id="walletBtnText">Connect Wallet</span>
             </button>
-          </form>
-        </div>
-
-        <!-- Tab 2: Reveal Form -->
-        <div id="tabRevealContent" class="tab-content">
-          <div class="reveal-instructions">
-            <p>Your commitments awaiting reveal in the current reveal window (<span id="revealWindowIndexRef" class="bold">W203</span>):</p>
-          </div>
-
-          <div id="savedOrdersList" class="orders-list">
-            <!-- Populated via JS -->
-            <div class="empty-orders-state">
-              <span class="empty-icon">📭</span>
-              <p>No active commitments pending reveal in this window.</p>
-            </div>
           </div>
         </div>
+      </header>
 
-        <!-- Tab 3: History -->
-        <div id="tabMyOrdersContent" class="tab-content">
-          <div id="orderHistoryList" class="orders-list">
-            <div class="empty-orders-state">
-              <p>No settled orders yet.</p>
-            </div>
-          </div>
-        </div>
-      </section>
+      <!-- Dynamic Page Container -->
+      <main class="page-content" id="pageContentContainer">
 
-      <!-- Right Column: Keeper CoW Match Engine & Batch Settlement Desk -->
-      <section class="keeper-terminal glass-card">
-        <div class="terminal-header">
-          <div class="terminal-title-wrap">
-            <div class="keeper-status-dot"></div>
-            <h2>Keeper Settlement Engine</h2>
-          </div>
-          <span class="badge-accent">Flash Matching</span>
-        </div>
-
-        <p class="section-desc">Simulated Greedy Two-Pointer matching across counterparties with automatic AMM fallback routing for unmatched residuals.</p>
-
-        <!-- Visual CoW Match Preview -->
-        <div class="matching-preview-card">
-          <div class="match-summary-grid">
-            <div class="match-stat">
-              <span class="match-stat-label">CoW Matched Volume:</span>
-              <span id="cowVolumeDisplay" class="match-stat-val text-green">16.0 Token</span>
+        <!-- ========================================== -->
+        <!-- 1. OVERVIEW PAGE                           -->
+        <!-- ========================================== -->
+        <section id="page-overview" class="page-view active">
+          <!-- Protocol Headline -->
+          <div class="page-header-row">
+            <div>
+              <h1 class="page-headline">Protocol Overview</h1>
+              <p class="page-subline">MEV-immune batch execution & peer-to-peer CoW matching on Uniswap v4</p>
             </div>
-            <div class="match-stat">
-              <span class="match-stat-label">AMM Fallback Leg:</span>
-              <span id="ammVolumeDisplay" class="match-stat-val text-yellow">4.0 Token</span>
-            </div>
-            <div class="match-stat">
-              <span class="match-stat-label">Estimated MEV Saved:</span>
-              <span id="mevSavedDisplay" class="match-stat-val text-purple">100% Protected</span>
-            </div>
-            <div class="match-stat">
-              <span class="match-stat-label">Est. Keeper Payout:</span>
-              <span id="keeperPayoutDisplay" class="match-stat-val text-emerald">0.0510 ETH</span>
+            <div class="header-action-group">
+              <button class="btn btn-secondary" onclick="navigateTo('trade')">
+                <i data-lucide="arrow-left-right"></i> Swap Tokens
+              </button>
+              <button class="btn btn-emerald" onclick="navigateTo('execution')">
+                <i data-lucide="zap"></i> Settle Batch
+              </button>
             </div>
           </div>
 
-          <!-- Counterparty Pairing Canvas -->
-          <div class="order-pairs-container">
-            <h4>Live Order Batch (Window <span id="settleWindowRef">202</span>)</h4>
-            <div id="batchOrdersVisual" class="batch-visual-list">
-              <!-- Rendered via JS -->
+          <!-- Top 4 Protocol KPI Metric Cards -->
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-meta">
+                <span class="metric-title">MEV Sandwich Protected</span>
+                <i data-lucide="shield-check" class="metric-icon text-emerald"></i>
+              </div>
+              <div class="metric-value text-emerald">100% IMMUNE</div>
+              <div class="metric-sub">0 ETH extracted by searchers</div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-meta">
+                <span class="metric-title">Total Escrowed Bonds</span>
+                <i data-lucide="vault" class="metric-icon text-cobalt"></i>
+              </div>
+              <div class="metric-value" id="overviewTotalBonds">0.000 ETH</div>
+              <div class="metric-sub">Anti-spam commit bond collateral</div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-meta">
+                <span class="metric-title">CoW P2P Matching Ratio</span>
+                <i data-lucide="refresh-cw" class="metric-icon text-purple"></i>
+              </div>
+              <div class="metric-value" id="overviewCowRatio">84.2%</div>
+              <div class="metric-sub">Zero-slippage peer-to-peer crossing</div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-meta">
+                <span class="metric-title">Keeper Fee Incentive</span>
+                <i data-lucide="coins" class="metric-icon text-amber"></i>
+              </div>
+              <div class="metric-value text-amber" id="overviewKeeperYield">5.0% Cut</div>
+              <div class="metric-sub">+ 100% on unrevealed forfeited bonds</div>
             </div>
           </div>
-        </div>
 
-        <!-- Settle Action -->
-        <div class="settle-action-panel">
-          <button id="advanceBlockBtn" class="btn btn-secondary">
-            <span>⏩ Advance +1 Block</span>
-          </button>
-          <button id="settleBatchBtn" class="btn btn-emerald btn-lg flex-1">
-            <span>⚡ Settle Batch & Claim Fee</span>
-          </button>
-        </div>
-      </section>
+          <!-- 3-Stage Asynchronous Window Pipeline Tracker -->
+          <div class="glass-card pipeline-card">
+            <div class="card-header-flex">
+              <div>
+                <h2 class="card-title">3-Stage Window Pipeline</h2>
+                <p class="card-desc">Asynchronous window segregation preventing strategic order withhold and searcher exploitation</p>
+              </div>
+              <div class="window-timer-pill">
+                <i data-lucide="clock"></i>
+                <span id="windowRemainingBlocksText">Blocks left: 3 / 5</span>
+                <div class="mini-progress-track">
+                  <div id="windowMiniProgressBar" class="mini-progress-fill" style="width: 60%;"></div>
+                </div>
+              </div>
+            </div>
 
+            <div class="pipeline-flow-grid">
+              <!-- Stage 1 -->
+              <div class="pipeline-col active-stage">
+                <div class="stage-tag current">STAGE 1 • ACTIVE</div>
+                <h3 class="stage-title">Commit Window</h3>
+                <span class="stage-window-num" id="overviewStage1Window">Window W...</span>
+                <p class="stage-desc">Users submit blinded cryptographic hashes on-chain with a 0.001 ETH bond. Direction and amount remain 100% concealed.</p>
+                <div class="stage-footer">
+                  <span>Pending Commits:</span>
+                  <strong id="overviewStage1Commits">0 Orders</strong>
+                </div>
+              </div>
+
+              <!-- Stage 2 -->
+              <div class="pipeline-col">
+                <div class="stage-tag reveal">STAGE 2 • REVEAL</div>
+                <h3 class="stage-title">Reveal Window</h3>
+                <span class="stage-window-num" id="overviewStage2Window">Window W-1</span>
+                <p class="stage-desc">Traders disclose plaintexts (token, direction, amount, salt). Bonds are securely retained until keeper settlement.</p>
+                <div class="stage-footer">
+                  <span>Revealed Plaintexts:</span>
+                  <strong id="overviewStage2Revealed">0 Orders</strong>
+                </div>
+              </div>
+
+              <!-- Stage 3 -->
+              <div class="pipeline-col">
+                <div class="stage-tag settle">STAGE 3 • SETTLEMENT</div>
+                <h3 class="stage-title">Flash Settlement</h3>
+                <span class="stage-window-num" id="overviewStage3Window">Window W-2</span>
+                <p class="stage-desc">Keepers execute two-pass CoW matching with AMM pool fallback in one atomic flash accounting callback.</p>
+                <div class="stage-footer">
+                  <span>Claimable Keeper Cut:</span>
+                  <strong class="text-emerald" id="overviewStage3Reward">0.000 ETH</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Protocol Activity Feed -->
+          <div class="glass-card activity-table-card">
+            <div class="card-header-flex">
+              <div>
+                <h2 class="card-title">Live On-Chain Protocol Events</h2>
+                <p class="card-desc">Real-time commit, reveal, and settlement logs on Base Sepolia</p>
+              </div>
+              <a href="https://sepolia.basescan.org" target="_blank" class="link-btn">
+                <span>BaseScan Explorer</span> <i data-lucide="external-link"></i>
+              </a>
+            </div>
+
+            <div class="table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Event</th>
+                    <th>Committer / Keeper</th>
+                    <th>Window</th>
+                    <th>Details</th>
+                    <th>Value</th>
+                    <th>Transaction</th>
+                  </tr>
+                </thead>
+                <tbody id="overviewActivityTableBody">
+                  <!-- Rendered dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- 2. TRADE & COMMIT DESK                     -->
+        <!-- ========================================== -->
+        <section id="page-trade" class="page-view">
+          <div class="page-header-row">
+            <div>
+              <h1 class="page-headline">Trade & Commit Desk</h1>
+              <p class="page-subline">Cryptographically blinded order placement with anti-MEV commit-reveal escrow</p>
+            </div>
+            <div class="header-status-pill">
+              <span class="pulse-dot"></span>
+              <span>Commit Window Open: <strong id="tradeActiveWindowTag">W...</strong></span>
+            </div>
+          </div>
+
+          <div class="trade-grid">
+            <!-- Left: Trading Order Terminal -->
+            <div class="glass-card trade-terminal-card">
+              <div class="terminal-tab-bar">
+                <button class="terminal-tab active">Commit Intent</button>
+                <button class="terminal-tab" onclick="navigateTo('execution')">Keeper Engine</button>
+              </div>
+
+              <!-- Input Token Box -->
+              <div class="trade-input-panel">
+                <div class="panel-header">
+                  <span class="panel-label">You Pay</span>
+                  <span class="panel-balance">Balance: <strong id="tradeTokenInBalance">1,000.00 T0</strong></span>
+                </div>
+                <div class="panel-body">
+                  <input type="number" id="tradeInputAmountIn" placeholder="0.0" step="any" value="10.0" class="token-amount-field">
+                  <div class="token-pill-badge">
+                    <span class="token-dot yellow"></span>
+                    <select id="tradeSelectTokenIn" class="token-select">
+                      <option value="token0">Token0 (T0)</option>
+                      <option value="token1">Token1 (T1)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Swap Flip Button -->
+              <div class="flip-divider">
+                <button id="tradeFlipTokensBtn" class="flip-btn" title="Switch direction">
+                  <i data-lucide="arrow-down-up"></i>
+                </button>
+              </div>
+
+              <!-- Output Token Box -->
+              <div class="trade-input-panel">
+                <div class="panel-header">
+                  <span class="panel-label">Minimum You Receive (Slippage Protected)</span>
+                  <span class="panel-balance">Balance: <strong id="tradeTokenOutBalance">1,000.00 T1</strong></span>
+                </div>
+                <div class="panel-body">
+                  <input type="number" id="tradeInputMinOut" placeholder="0.0" step="any" value="9.8" class="token-amount-field">
+                  <div class="token-pill-badge">
+                    <span class="token-dot blue"></span>
+                    <select id="tradeSelectTokenOut" class="token-select">
+                      <option value="token1">Token1 (T1)</option>
+                      <option value="token0">Token0 (T0)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Slippage Presets -->
+              <div class="slippage-box">
+                <span class="slippage-label">Slippage Tolerance:</span>
+                <div class="slippage-buttons">
+                  <button class="slip-btn" data-slip="0.1">0.1%</button>
+                  <button class="slip-btn active" data-slip="0.5">0.5%</button>
+                  <button class="slip-btn" data-slip="1.0">1.0%</button>
+                  <button class="slip-btn" data-slip="2.0">2.0%</button>
+                </div>
+              </div>
+
+              <!-- Cryptographic Details Card -->
+              <div class="crypto-security-summary">
+                <div class="crypto-row">
+                  <span>Cryptographic Salt:</span>
+                  <span class="font-mono text-dim" id="tradeSaltDisplay">0x...</span>
+                  <button id="tradeRegenSaltBtn" class="link-btn-text">🎲 New Salt</button>
+                </div>
+                <div class="crypto-row">
+                  <span>Calculated Keccak256 Hash:</span>
+                  <span class="font-mono truncate-hash" id="tradeHashDisplay">0x...</span>
+                </div>
+                <div class="crypto-row highlight">
+                  <span>Refundable Anti-Spam Bond:</span>
+                  <span class="font-mono bold text-emerald">0.001 ETH</span>
+                </div>
+              </div>
+
+              <!-- Main Commit Action Button -->
+              <button id="tradeSubmitCommitBtn" class="btn btn-primary btn-block btn-lg">
+                <i data-lucide="lock" class="btn-icon"></i>
+                <span>Commit Swap Intent (0.001 ETH Bond)</span>
+              </button>
+            </div>
+
+            <!-- Right: Active Reveal Desk -->
+            <div class="glass-card reveal-desk-card">
+              <div class="card-header-flex">
+                <div>
+                  <h2 class="card-title">Active Reveal Desk</h2>
+                  <p class="card-desc">Orders whose commit window closed are ready for plaintext publication (<span id="tradeRevealWindowTag" class="bold text-cobalt">W...</span>)</p>
+                </div>
+                <span class="badge-mini" id="tradePendingRevealCount">0 Pending</span>
+              </div>
+
+              <div class="reveal-orders-queue" id="tradeRevealOrdersContainer">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- 3. BATCH EXECUTION & KEEPER DESK           -->
+        <!-- ========================================== -->
+        <section id="page-execution" class="page-view">
+          <div class="page-header-row">
+            <div>
+              <h1 class="page-headline">Batch Execution & Keeper Engine</h1>
+              <p class="page-subline">Two-pass CoW matching engine with atomic Uniswap v4 flash accounting fallback</p>
+            </div>
+            <div class="header-action-group">
+              <button id="execAdvanceBlockBtn" class="btn btn-secondary">
+                <i data-lucide="fast-forward"></i> +1 Block
+              </button>
+              <button id="execSettleBatchBtn" class="btn btn-emerald">
+                <i data-lucide="zap"></i> Settle Batch On-Chain
+              </button>
+            </div>
+          </div>
+
+          <!-- Execution KPIs -->
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-meta">
+                <span class="metric-title">CoW Matched Volume</span>
+                <i data-lucide="refresh-cw" class="metric-icon text-emerald"></i>
+              </div>
+              <div class="metric-value text-emerald" id="execCowVolume">0.0 T0/T1</div>
+              <div class="metric-sub">100% Peer-to-Peer Crossing</div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-meta">
+                <span class="metric-title">AMM Fallback Volume</span>
+                <i data-lucide="trending-up" class="metric-icon text-amber"></i>
+              </div>
+              <div class="metric-value text-amber" id="execAmmVolume">0.0 T0/T1</div>
+              <div class="metric-sub">Routed through Uniswap Pool</div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-meta">
+                <span class="metric-title">Keeper Fee Payout</span>
+                <i data-lucide="award" class="metric-icon text-cobalt"></i>
+              </div>
+              <div class="metric-value text-cobalt" id="execKeeperPayout">0.000 ETH</div>
+              <div class="metric-sub">5% on revealed + 100% forfeited</div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-meta">
+                <span class="metric-title">Current Settlement Target</span>
+                <i data-lucide="layers" class="metric-icon text-purple"></i>
+              </div>
+              <div class="metric-value font-mono" id="execTargetWindow">Window W-2</div>
+              <div class="metric-sub">Window Index Eligible for Settlement</div>
+            </div>
+          </div>
+
+          <!-- Batch Pairing Visualizer Canvas -->
+          <div class="glass-card batch-canvas-card">
+            <div class="card-header-flex">
+              <div>
+                <h2 class="card-title">Two-Pointer CoW Crossing Canvas</h2>
+                <p class="card-desc">Orders paired directly against opposing flows at zero slippage and zero LP fee</p>
+              </div>
+              <span class="badge-accent" id="execBatchStatusBadge">Ready for Settle</span>
+            </div>
+
+            <div class="batch-pairing-visual" id="execBatchPairingContainer">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- 4. LIQUIDITY & VAULT DESK                  -->
+        <!-- ========================================== -->
+        <section id="page-vault" class="page-view">
+          <div class="page-header-row">
+            <div>
+              <h1 class="page-headline">Liquidity & Vault Desk</h1>
+              <p class="page-subline">Uniswap v4 PoolManager liquidity state and token faucet minting</p>
+            </div>
+          </div>
+
+          <div class="vault-grid">
+            <!-- Pool Parameters Card -->
+            <div class="glass-card">
+              <h2 class="card-title">Uniswap v4 Pool Key</h2>
+              <div class="pool-detail-rows">
+                <div class="detail-row">
+                  <span class="detail-label">Pool ID:</span>
+                  <span class="detail-val font-mono truncate-hash" id="vaultPoolIdDisplay">0x...</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Token0 (T0):</span>
+                  <span class="detail-val font-mono truncate-hash" id="vaultToken0Display">0x...</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Token1 (T1):</span>
+                  <span class="detail-val font-mono truncate-hash" id="vaultToken1Display">0x...</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Fee Tier:</span>
+                  <span class="detail-val font-mono">3000 (0.30%)</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Tick Spacing:</span>
+                  <span class="detail-val font-mono">60</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Hook Address:</span>
+                  <span class="detail-val font-mono text-cobalt truncate-hash" id="vaultHookAddressDisplay">0x...</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Faucet Mint Card -->
+            <div class="glass-card">
+              <h2 class="card-title">Test Tokens Faucet</h2>
+              <p class="card-desc">Mint mock ERC20 tokens to your connected wallet for testing swaps</p>
+
+              <div class="faucet-action-grid">
+                <div class="faucet-item">
+                  <div class="faucet-meta">
+                    <span class="bold">Token0 (TKA)</span>
+                    <span class="text-dim">1,000 Tokens</span>
+                  </div>
+                  <button id="vaultMintT0Btn" class="btn btn-secondary">
+                    <i data-lucide="plus-circle"></i> Mint T0
+                  </button>
+                </div>
+
+                <div class="faucet-item">
+                  <div class="faucet-meta">
+                    <span class="bold">Token1 (TKB)</span>
+                    <span class="text-dim">1,000 Tokens</span>
+                  </div>
+                  <button id="vaultMintT1Btn" class="btn btn-secondary">
+                    <i data-lucide="plus-circle"></i> Mint T1
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- 5. MEV ANALYTICS DESK                      -->
+        <!-- ========================================== -->
+        <section id="page-analytics" class="page-view">
+          <div class="page-header-row">
+            <div>
+              <h1 class="page-headline">MEV & Protection Analytics</h1>
+              <p class="page-subline">Cryptographic defenses and empirical execution performance</p>
+            </div>
+          </div>
+
+          <div class="analytics-charts-grid">
+            <div class="glass-card">
+              <h2 class="card-title">Volume Routing Distribution</h2>
+              <p class="card-desc">Peer-to-peer CoW volume vs AMM Fallback swaps</p>
+              <div class="chart-wrapper">
+                <canvas id="volumeRoutingChart" height="240"></canvas>
+              </div>
+            </div>
+
+            <div class="glass-card">
+              <h2 class="card-title">Gas Optimization vs Individual Swaps</h2>
+              <p class="card-desc">Flash accounting net settlement gas savings</p>
+              <div class="chart-wrapper">
+                <canvas id="gasSavingsChart" height="240"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- Threat Model Matrix -->
+          <div class="glass-card" style="margin-top: 24px;">
+            <h2 class="card-title">Threat Model Verification Matrix</h2>
+            <div class="table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Attack Vector</th>
+                    <th>Mechanism</th>
+                    <th>Defense Layer</th>
+                    <th>Verification Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong class="text-white">Sandwich Attacks</strong></td>
+                    <td>Front-running & back-running pending mempool swaps</td>
+                    <td>Cryptographic Keccak256 commit preimages</td>
+                    <td><span class="status-badge success">✓ 100% Immune</span></td>
+                  </tr>
+                  <tr>
+                    <td><strong class="text-white">Free-Option Attack</strong></td>
+                    <td>Adverse price movement reveal withholding</td>
+                    <td>100% bond forfeiture to keeper</td>
+                    <td><span class="status-badge success">✓ Strict Loss Imposed</span></td>
+                  </tr>
+                  <tr>
+                    <td><strong class="text-white">Dust Intent Spam</strong></td>
+                    <td>Flooding commit queue with worthless orders</td>
+                    <td>0.001 ETH mandatory bond per commitment</td>
+                    <td><span class="status-badge success">✓ Prohibitive Cost</span></td>
+                  </tr>
+                  <tr>
+                    <td><strong class="text-white">Residual Slippage</strong></td>
+                    <td>Unmatched order volume moving AMM spot price</td>
+                    <td>Pro-rated minAmountOut check in Pass 3</td>
+                    <td><span class="status-badge success">✓ Reverts on Slippage</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- 6. ON-CHAIN HISTORY & EXPLORER             -->
+        <!-- ========================================== -->
+        <section id="page-history" class="page-view">
+          <div class="page-header-row">
+            <div>
+              <h1 class="page-headline">On-Chain History & Explorer</h1>
+              <p class="page-subline">Auditable commitment lifecycle records linked directly to BaseScan</p>
+            </div>
+          </div>
+
+          <div class="glass-card">
+            <div class="table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Committer</th>
+                    <th>Type</th>
+                    <th>Amount</th>
+                    <th>Min Out</th>
+                    <th>Bond</th>
+                    <th>Window</th>
+                    <th>Status</th>
+                    <th>BaseScan Tx</th>
+                  </tr>
+                </thead>
+                <tbody id="historyTableBody">
+                  <!-- Rendered dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- 7. SETTINGS & CONTRACTS HUB                -->
+        <!-- ========================================== -->
+        <section id="page-settings" class="page-view">
+          <div class="page-header-row">
+            <div>
+              <h1 class="page-headline">Contracts & Network Hub</h1>
+              <p class="page-subline">Base Sepolia RPC, Uniswap v4 contract bindings, and verification</p>
+            </div>
+          </div>
+
+          <div class="settings-grid">
+            <div class="glass-card">
+              <h2 class="card-title">Smart Contract Bindings</h2>
+              <p class="card-desc">Configure the active contract addresses used by the terminal</p>
+
+              <div class="settings-form">
+                <div class="form-group">
+                  <label>CommitSwapHook Contract Address</label>
+                  <input type="text" id="settingsHookAddress" class="input-field font-mono" value="0x0000000000000000000000000000000000000088">
+                </div>
+
+                <div class="form-group">
+                  <label>Uniswap v4 PoolManager Address</label>
+                  <input type="text" id="settingsPoolManagerAddress" class="input-field font-mono" value="0x0000000000000000000000000000000000000000">
+                </div>
+
+                <div class="form-group">
+                  <label>Pool ID (Bytes32)</label>
+                  <input type="text" id="settingsPoolId" class="input-field font-mono" value="0x0000000000000000000000000000000000000000000000000000000000000000">
+                </div>
+
+                <button id="settingsSaveContractsBtn" class="btn btn-primary">
+                  <i data-lucide="save"></i> Save Contract Configuration
+                </button>
+              </div>
+            </div>
+
+            <div class="glass-card">
+              <h2 class="card-title">Network & Node Details</h2>
+              <div class="pool-detail-rows">
+                <div class="detail-row">
+                  <span class="detail-label">Network Name:</span>
+                  <span class="detail-val">Base Sepolia Testnet</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Chain ID:</span>
+                  <span class="detail-val font-mono">84532 (0x14a34)</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Native Gas Token:</span>
+                  <span class="detail-val font-mono">ETH (18 Decimals)</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Public RPC URL:</span>
+                  <span class="detail-val font-mono">https://sepolia.base.org</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Block Explorer:</span>
+                  <a href="https://sepolia.basescan.org" target="_blank" class="detail-val text-cobalt font-mono">https://sepolia.basescan.org ↗</a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </main>
     </div>
+  </div>
 
-    <!-- MEV Analytics & Protocol Health Stats -->
-    <section class="analytics-row glass-card">
-      <div class="analytics-item">
-        <span class="analytics-icon">🛡️</span>
-        <div class="analytics-meta">
-          <span class="analytics-title">Front-running / Sandwiching</span>
-          <span class="analytics-value text-emerald">0 Extracted (100% Blocked)</span>
-        </div>
-      </div>
-      <div class="analytics-item">
-        <span class="analytics-icon">🔄</span>
-        <div class="analytics-meta">
-          <span class="analytics-title">Coincidence of Wants Efficiency</span>
-          <span class="analytics-value">84.2% Peer-to-Peer</span>
-        </div>
-      </div>
-      <div class="analytics-item">
-        <span class="analytics-icon">⛽</span>
-        <div class="analytics-meta">
-          <span class="analytics-title">Gas Reduction vs Individual Swaps</span>
-          <span class="analytics-value text-purple">~42% Gas Savings</span>
-        </div>
-      </div>
-    </section>
-
-  </main>
-
-  <!-- Notification Toast Container -->
+  <!-- Toast Notification Center -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <!-- Main JavaScript Logic -->
+  <!-- JavaScript Engine -->
   <script src="app.js"></script>
+  <script>
+    // Initialize Lucide Icons
+    lucide.createIcons();
+  </script>
 </body>
 </html>
