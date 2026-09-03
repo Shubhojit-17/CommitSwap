@@ -214,6 +214,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupFaucetHandlers();
   setupWalletHandler();
   setupSettingsHandler();
+  setupThemeHandler();
+  setupQuickPctHandler();
   
   // Connect to live Backend WebSocket, REST API, and RPC
   connectBackendWebSocket();
@@ -449,20 +451,67 @@ function renderExecutionCanvas(settleWindow) {
   document.getElementById("execCowVolume").textContent = `${(cowMatch * 2).toFixed(1)} T0/T1`;
   document.getElementById("execAmmVolume").textContent = `${residual.toFixed(1)} T0/T1`;
 
-  container.innerHTML = targetOrders.map(order => `
-    <div class="reveal-card-item">
-      <div style="display:flex; align-items:center; gap:10px;">
-        <span class="badge-mini">#${order.id}</span>
-        <span class="bold">${order.amount} ${order.zeroForOne ? 'T0 → T1' : 'T1 → T0'}</span>
-        <span class="font-mono text-dim" style="font-size:0.75rem;">Committer: ${order.committer.slice(0, 6)}...</span>
+  container.innerHTML = `
+    <div class="cow-crossing-visualizer">
+      <!-- Left Lane: Token0 -> Token1 -->
+      <div class="cow-lane">
+        <div class="cow-lane-header text-amber">
+          <i data-lucide="arrow-down-right"></i>
+          <span>T0 → T1 Intents (${group0.length})</span>
+        </div>
+        ${group0.length > 0 ? group0.map(o => `
+          <div class="cow-order-card">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span class="bold">#${o.id} · ${o.amount} T0</span>
+              <span class="text-dim font-mono" style="font-size:0.75rem;">${o.committer.slice(0, 6)}...</span>
+            </div>
+            <div style="font-size:0.75rem; color:var(--text-muted); display:flex; justify-content:space-between;">
+              <span>Min Out: ${o.minAmountOut} T1</span>
+              <span style="color:#10b981; font-weight:600;">CoW Ready</span>
+            </div>
+          </div>
+        `).join('') : `<div style="color:var(--text-dim); font-size:0.8rem; padding:12px 0;">No active T0 intents in window</div>`}
       </div>
-      <div>
-        ${order.revealed ?
-          `<span class="badge-accent" style="background:rgba(16,185,129,0.15); color:#34d399;">Peer CoW Matched</span>` :
-          `<span class="badge-accent" style="background:rgba(245,158,11,0.15); color:#fbbf24;">Forfeited to Keeper</span>`}
+
+      <!-- Center Crossing Beam -->
+      <div class="cow-center-crossing">
+        <div class="crossing-icon-wrap">
+          <i data-lucide="refresh-cw"></i>
+        </div>
+        <div style="font-size:0.85rem; font-weight:700; color:#10b981;">
+          ${(cowMatch * 2).toFixed(1)} Matched
+        </div>
+        <div style="font-size:0.75rem; color:var(--text-muted); line-height:1.3;">
+          Zero Slippage<br>Zero LP Fee
+        </div>
+        ${residual > 0 ? `
+          <div style="font-size:0.7rem; padding:3px 8px; background:rgba(245,158,11,0.15); color:#f59e0b; border-radius:999px; border:1px solid rgba(245,158,11,0.3); margin-top:4px;">
+            Residual: ${residual.toFixed(1)} AMM / Roll
+          </div>
+        ` : ''}
+      </div>
+
+      <!-- Right Lane: Token1 -> Token0 -->
+      <div class="cow-lane">
+        <div class="cow-lane-header text-cobalt">
+          <i data-lucide="arrow-up-left"></i>
+          <span>T1 → T0 Intents (${group1.length})</span>
+        </div>
+        ${group1.length > 0 ? group1.map(o => `
+          <div class="cow-order-card">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span class="bold">#${o.id} · ${o.amount} T1</span>
+              <span class="text-dim font-mono" style="font-size:0.75rem;">${o.committer.slice(0, 6)}...</span>
+            </div>
+            <div style="font-size:0.75rem; color:var(--text-muted); display:flex; justify-content:space-between;">
+              <span>Min Out: ${o.minAmountOut} T0</span>
+              <span style="color:#10b981; font-weight:600;">CoW Ready</span>
+            </div>
+          </div>
+        `).join('') : `<div style="color:var(--text-dim); font-size:0.8rem; padding:12px 0;">No active T1 intents in window</div>`}
       </div>
     </div>
-  `).join('');
+  `;
   if (window.lucide) lucide.createIcons();
 }
 
@@ -581,16 +630,24 @@ function setupTradeHandlers() {
     }
 
     try {
-      showToast("Submitting commit to MetaMask with 0.001 ETH bond on Base Sepolia...", "info");
+      showProofModal();
+      updateProofStep(1, 25);
+      await new Promise(r => setTimeout(r, 350));
+      updateProofStep(2, 45);
+      await new Promise(r => setTimeout(r, 300));
+      updateProofStep(3, 65);
+
       const hookContract = new ethers.Contract(STATE.hookAddress, COMMIT_SWAP_HOOK_ABI, STATE.signer);
       
       const tx = await hookContract.commit(STATE.currentHash, {
         value: ethers.parseEther("0.001")
       });
 
+      updateProofStep(4, 85);
       showToast(`Tx broadcasted: ${tx.hash.slice(0, 10)}... Confirming on Base Sepolia...`, "info");
       const receipt = await tx.wait();
 
+      finishProofModal(tx.hash);
       showToast(
         `✅ Commit Confirmed on Base Sepolia! <a href="https://sepolia.basescan.org/tx/${tx.hash}" target="_blank" style="color:#6ee7b7;text-decoration:underline;">BaseScan ↗</a>`,
         "success"
@@ -634,6 +691,7 @@ function setupTradeHandlers() {
       initSalt();
       updateUI();
     } catch (err) {
+      document.getElementById("proofModalOverlay")?.classList.remove("active");
       console.error("On-chain commit error:", err);
       showToast(`Transaction rejected or reverted: ${err.shortMessage || err.message}`, "warning");
     }
@@ -981,4 +1039,102 @@ function showToast(message, type = "info") {
     toast.style.opacity = "0";
     setTimeout(() => toast.remove(), 300);
   }, 5000);
+}
+
+// ──── Onyx Cryptographic Proof Modal Engine ────
+function showProofModal() {
+  const overlay = document.getElementById("proofModalOverlay");
+  const bar = document.getElementById("proofProgressBar");
+  const linkBox = document.getElementById("proofModalTxLinkContainer");
+  if (!overlay) return;
+  overlay.classList.add("active");
+  if (linkBox) linkBox.style.display = "none";
+  if (bar) bar.style.width = "20%";
+  for (let i = 1; i <= 5; i++) {
+    const el = document.getElementById(`proofStep${i}`);
+    if (el) {
+      el.className = "proof-step-item" + (i === 1 ? " active" : "");
+    }
+  }
+}
+
+function updateProofStep(step, pct) {
+  const bar = document.getElementById("proofProgressBar");
+  if (bar) bar.style.width = `${pct}%`;
+  for (let i = 1; i <= 5; i++) {
+    const el = document.getElementById(`proofStep${i}`);
+    if (el) {
+      if (i < step) el.className = "proof-step-item done";
+      else if (i === step) el.className = "proof-step-item active";
+      else el.className = "proof-step-item";
+    }
+  }
+}
+
+function finishProofModal(txHash) {
+  updateProofStep(5, 100);
+  const step5 = document.getElementById("proofStep5");
+  if (step5) step5.className = "proof-step-item done";
+  const linkBox = document.getElementById("proofModalTxLinkContainer");
+  const link = document.getElementById("proofModalBaseScanLink");
+  if (linkBox && link) {
+    link.href = `https://sepolia.basescan.org/tx/${txHash}`;
+    linkBox.style.display = "block";
+  }
+}
+
+// ──── Onyx Theme Switcher Engine ────
+function setupThemeHandler() {
+  const themes = ["obsidian", "shadow", "cobalt"];
+  let currentTheme = localStorage.getItem("commitswap_theme") || "obsidian";
+  
+  function applyTheme(theme) {
+    const label = document.getElementById("themeToggleLabel");
+    if (theme === "obsidian") {
+      document.documentElement.removeAttribute("data-design-theme");
+      if (label) label.textContent = "Obsidian";
+    } else if (theme === "shadow") {
+      document.documentElement.setAttribute("data-design-theme", "shadow");
+      if (label) label.textContent = "Shadow";
+    } else if (theme === "cobalt") {
+      document.documentElement.setAttribute("data-design-theme", "cobalt");
+      if (label) label.textContent = "Cobalt";
+    }
+    localStorage.setItem("commitswap_theme", theme);
+  }
+
+  applyTheme(currentTheme);
+
+  document.getElementById("themeToggleBtn")?.addEventListener("click", () => {
+    const nextIdx = (themes.indexOf(currentTheme) + 1) % themes.length;
+    currentTheme = themes[nextIdx];
+    applyTheme(currentTheme);
+    showToast(`Onyx theme switched to: ${currentTheme.toUpperCase()}`, "info");
+  });
+}
+
+// ──── Onyx Quick Percent Buttons & Modal Closer ────
+function setupQuickPctHandler() {
+  document.querySelectorAll(".pct-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const pct = parseFloat(btn.getAttribute("data-pct"));
+      const balance = 1000.0;
+      const calculated = ((balance * pct) / 100).toFixed(1);
+      const input = document.getElementById("tradeInputAmountIn");
+      if (input) {
+        input.value = calculated;
+        updateTradeHashPreview();
+      }
+    });
+  });
+
+  document.getElementById("proofModalCloseBtn")?.addEventListener("click", () => {
+    document.getElementById("proofModalOverlay")?.classList.remove("active");
+  });
+
+  document.getElementById("proofModalOverlay")?.addEventListener("click", (e) => {
+    if (e.target.id === "proofModalOverlay") {
+      document.getElementById("proofModalOverlay").classList.remove("active");
+    }
+  });
 }

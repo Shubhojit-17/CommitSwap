@@ -1,5 +1,5 @@
 /**
- * CommitSwap — Dark Obsidian Design System (Modeled after Onyx)
+ * CommitSwap — Dark Obsidian Design System (Modeled directly after Onyx)
  */
 
 :root {
@@ -35,6 +35,41 @@
   --radius-pill: 9999px;
   
   --transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ──── Onyx Shadow Hacker Theme (Neon Matrix Green Terminal) ──── */
+[data-design-theme="shadow"] {
+  --background: #000000;
+  --sidebar-bg: #030803;
+  --card-bg: #0a0f0a;
+  --card-hover: #0f1a0f;
+  --surface-glass: rgba(5, 15, 5, 0.85);
+  --border: rgba(74, 222, 128, 0.15);
+  --border-focus: rgba(74, 222, 128, 0.6);
+  --primary: #4ade80;
+  --primary-glow: rgba(74, 222, 128, 0.4);
+  --cobalt: #4ade80;
+  --emerald: #22c55e;
+  --text-main: #4ade80;
+  --text-muted: #86efac;
+  --text-dim: #16a34a;
+}
+
+/* ──── Onyx Cyber Cobalt Theme (Deep Electric Blue) ──── */
+[data-design-theme="cobalt"] {
+  --background: #030712;
+  --sidebar-bg: #050b1d;
+  --card-bg: #0b152e;
+  --card-hover: #112046;
+  --surface-glass: rgba(11, 21, 46, 0.85);
+  --border: rgba(59, 130, 246, 0.18);
+  --border-focus: rgba(59, 130, 246, 0.6);
+  --primary: #3b82f6;
+  --primary-glow: rgba(59, 130, 246, 0.4);
+  --cobalt: #38bdf8;
+  --text-main: #f0f9ff;
+  --text-muted: #93c5fd;
+  --text-dim: #60a5fa;
 }
 
 * {
@@ -1101,4 +1136,238 @@ body {
   .mobile-toggle-btn {
     display: block;
   }
+}
+
+/* ──── Onyx Quick Percent Row & Balance Badges ──── */
+.token-balance-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.quick-pct-group {
+  display: flex;
+  gap: 6px;
+}
+
+.pct-btn {
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.pct-btn:hover {
+  background: rgba(37, 99, 235, 0.2);
+  color: #93c5fd;
+  border-color: var(--primary);
+}
+
+/* ──── Onyx Cryptographic Proof Modal ──── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.modal-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.modal-box {
+  background: var(--card-bg);
+  border: 1px solid var(--border-focus);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6), 0 0 30px var(--primary-glow);
+  border-radius: var(--radius-lg);
+  width: 90%;
+  max-width: 520px;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  transform: translateY(20px) scale(0.97);
+  transition: transform 0.25s ease;
+}
+
+.modal-overlay.active .modal-box {
+  transform: translateY(0) scale(1);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modal-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+}
+
+.modal-close-btn:hover {
+  color: var(--text-main);
+}
+
+.proof-progress-track {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.proof-progress-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--primary), #10b981);
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+.proof-steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.proof-step-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  transition: var(--transition);
+}
+
+.proof-step-item.active {
+  border-color: var(--primary);
+  color: var(--text-main);
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.proof-step-item.done {
+  border-color: rgba(16, 185, 129, 0.3);
+  color: #10b981;
+}
+
+/* ──── Two-Pointer CoW Crossing Canvas ──── */
+.cow-crossing-visualizer {
+  display: grid;
+  grid-template-columns: 1fr 140px 1fr;
+  gap: 16px;
+  align-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  margin-top: 16px;
+}
+
+.cow-lane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cow-lane-header {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cow-order-card {
+  padding: 12px 14px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: var(--transition);
+}
+
+.cow-order-card:hover {
+  border-color: var(--primary);
+  transform: translateY(-2px);
+}
+
+.cow-center-crossing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.crossing-icon-wrap {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #10b981;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: pulseGlow 2s infinite ease-in-out;
+}
+
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+  50% { box-shadow: 0 0 15px 4px rgba(16, 185, 129, 0.2); }
+}
+
+.theme-switch-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.theme-switch-btn:hover {
+  color: var(--text-main);
+  border-color: var(--primary);
+  background: rgba(255, 255, 255, 0.08);
 }

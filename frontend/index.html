@@ -107,6 +107,12 @@
             <span class="ticker-text">Window: <strong id="headerWindowIndex">W...</strong></span>
           </div>
 
+          <!-- Theme Switcher (Onyx Modes) -->
+          <button id="themeToggleBtn" class="theme-switch-btn" title="Toggle Obsidian / Shadow Hacker / Cyber Cobalt">
+            <i data-lucide="palette"></i>
+            <span id="themeToggleLabel">Obsidian</span>
+          </button>
+
           <!-- Base Sepolia Network Pill -->
           <div class="network-badge-pill">
             <span class="pulse-dot"></span>
@@ -299,6 +305,12 @@
               <div class="trade-input-panel">
                 <div class="panel-header">
                   <span class="panel-label">You Pay</span>
+                  <div class="quick-pct-group">
+                    <button class="pct-btn" data-pct="25">25%</button>
+                    <button class="pct-btn" data-pct="50">50%</button>
+                    <button class="pct-btn" data-pct="75">75%</button>
+                    <button class="pct-btn" data-pct="100">MAX</button>
+                  </div>
                   <span class="panel-balance">Balance: <strong id="tradeTokenInBalance">1,000.00 T0</strong></span>
                 </div>
                 <div class="panel-body">
@@ -713,6 +725,55 @@
         </section>
 
       </main>
+    </div>
+  </div>
+
+  <!-- Onyx Cryptographic Proof & Confirmation Modal -->
+  <div id="proofModalOverlay" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div class="modal-title">
+          <i data-lucide="shield-check" class="text-cobalt"></i>
+          <span>Cryptographic Intent Commitment</span>
+        </div>
+        <button id="proofModalCloseBtn" class="modal-close-btn">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+
+      <div class="proof-progress-track">
+        <div id="proofProgressBar" class="proof-progress-bar"></div>
+      </div>
+
+      <div class="proof-steps-list">
+        <div class="proof-step-item" id="proofStep1">
+          <i data-lucide="circle-dot" class="step-icon"></i>
+          <span class="step-text">1. Hashing intent pre-image: keccak256(amountIn, minOut, salt)...</span>
+        </div>
+        <div class="proof-step-item" id="proofStep2">
+          <i data-lucide="lock" class="step-icon"></i>
+          <span class="step-text">2. Pre-image locked & bound to Uniswap v4 Pool ID</span>
+        </div>
+        <div class="proof-step-item" id="proofStep3">
+          <i data-lucide="wallet" class="step-icon"></i>
+          <span class="step-text">3. Requesting MetaMask signature (0.001 ETH refundable bond)...</span>
+        </div>
+        <div class="proof-step-item" id="proofStep4">
+          <i data-lucide="cpu" class="step-icon"></i>
+          <span class="step-text">4. Broadcasting to CommitSwapHook on Base Sepolia...</span>
+        </div>
+        <div class="proof-step-item" id="proofStep5">
+          <i data-lucide="check-circle-2" class="step-icon"></i>
+          <span class="step-text">5. Confirmed on-chain on BaseScan!</span>
+        </div>
+      </div>
+
+      <div id="proofModalTxLinkContainer" style="display:none; margin-top:8px;">
+        <a id="proofModalBaseScanLink" href="#" target="_blank" class="btn btn-primary" style="display:flex; justify-content:center; width:100%; text-decoration:none;">
+          <span>View Verified Intent on BaseScan</span>
+          <i data-lucide="external-link"></i>
+        </a>
+      </div>
     </div>
   </div>
 
