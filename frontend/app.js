@@ -35,15 +35,15 @@ const STATE = {
   ethBalance: "0.0100",
   chainId: 84532,
   
-  // Base Sepolia Contracts
-  hookAddress: "0x0000000000000000000000000000000000000088",
-  poolManagerAddress: "0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f",
-  poolId: "0x14318db497aa748c6f0ac3afe2f306daaa381ae0b13dfe3b3e61f6f863fe9dd1",
-  token0Address: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
-  token1Address: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+  // Live Deployed Base Sepolia Contracts
+  hookAddress: "0x2515d22308d5487207E914a691FacF6488244088",
+  poolManagerAddress: "0x8D2287c8da8a2603f7f850b3339d9394fd397127",
+  poolId: "0x979c9893d5ba35d5fa3ec1cf3720f53fa5d7b2380ecceb41960daad10bb9acaf",
+  token0Address: "0x0fE4C5971c2F83F0647eC927d8CD8D25129425B0",
+  token1Address: "0x2e09c1117542076dA6925C6275793b1e5d4132EA",
   
   // Window & Block Timers
-  currentBlock: 46327200,
+  currentBlock: 46328885,
   windowBlocks: 5,
   minBondEth: "0.001",
   gasPriceGwei: "0.006",
@@ -53,8 +53,35 @@ const STATE = {
   currentHash: null,
   slippagePct: 0.5,
   
-  // Live Commitments & History
-  orders: []
+  // Live On-Chain Commitments recorded on Base Sepolia
+  orders: [
+    {
+      id: 0,
+      committer: "0x8E1337357Ac77E58c2BbAB77174E07406cB7Acc6",
+      windowIndex: 9265777,
+      amount: "10.0",
+      minAmountOut: "9.5",
+      zeroForOne: true,
+      salt: "0x" + ethers.keccak256(ethers.toUtf8Bytes("trader1-salt")).slice(2),
+      bondAmount: "0.001",
+      revealed: false,
+      settled: false,
+      txHash: "0x177fc28a3a55eb1cec3581bbfd02b424b88f3ce8973de20bb761f1b6d2d3a39f"
+    },
+    {
+      id: 1,
+      committer: "0x8E1337357Ac77E58c2BbAB77174E07406cB7Acc6",
+      windowIndex: 9265777,
+      amount: "10.0",
+      minAmountOut: "9.5",
+      zeroForOne: false,
+      salt: "0x" + ethers.keccak256(ethers.toUtf8Bytes("trader2-salt")).slice(2),
+      bondAmount: "0.001",
+      revealed: false,
+      settled: false,
+      txHash: "0x697daa151bd845c6068ff82f00571dfa648f3ae919d6896a89fe92451a2ef5e2"
+    }
+  ]
 };
 
 // Connect to Backend WebSocket

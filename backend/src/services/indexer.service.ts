@@ -65,61 +65,87 @@ class IndexerService {
     }
   }
 
+  private lastQueriedBlock: number = 0;
+
   private listenToOnChainEvents() {
     if (!this.hookContract) return;
 
-    this.hookContract.on("Committed", (id, committer, intentHash, windowIndex, bondAmount, event) => {
-      console.log(`[On-Chain] Event Committed: Order #${id} by ${committer} for Window W${windowIndex}`);
-      const order: IntentOrder = {
-        id: Number(id),
-        committer,
-        amount: 0n,
-        minAmountOut: 0n,
-        zeroForOne: true,
-        revealed: false,
-        settled: false,
-        bondAmount: BigInt(bondAmount.toString()),
-        windowIndex: Number(windowIndex),
-        salt: intentHash,
-        txHash: event?.log?.transactionHash,
-        timestamp: new Date().toISOString()
-      };
-      this.orders.set(order.id, order);
-      wsManager.emit("order:committed", order);
-    });
+    this.lastQueriedBlock = Math.max(0, this.currentBlock - 100);
 
-    this.hookContract.on("Revealed", (id, committer, amount, minAmountOut, zeroForOne, poolId, event) => {
-      console.log(`[On-Chain] Event Revealed: Order #${id} by ${committer}`);
-      const order = this.orders.get(Number(id));
-      if (order) {
-        order.revealed = true;
-        order.amount = BigInt(amount.toString());
-        order.minAmountOut = BigInt(minAmountOut.toString());
-        order.zeroForOne = Boolean(zeroForOne);
-        wsManager.emit("order:revealed", order);
+    setInterval(async () => {
+      if (!this.hookContract) return;
+      try {
+        const toBlock = this.currentBlock;
+        if (toBlock <= this.lastQueriedBlock) return;
+
+        const fromBlock = this.lastQueriedBlock + 1;
+
+        // Query Committed events
+        const commitEvents = await this.hookContract.queryFilter("Committed", fromBlock, toBlock);
+        for (const evt of commitEvents) {
+          const args = (evt as any).args;
+          const id = Number(args.id);
+          if (!this.orders.has(id)) {
+            const order: IntentOrder = {
+              id,
+              committer: args.committer,
+              amount: 0n,
+              minAmountOut: 0n,
+              zeroForOne: true,
+              revealed: false,
+              settled: false,
+              bondAmount: BigInt(args.bondAmount.toString()),
+              windowIndex: Number(args.windowIndex),
+              salt: args.intentHash,
+              txHash: evt.transactionHash,
+              timestamp: new Date().toISOString()
+            };
+            this.orders.set(order.id, order);
+            console.log(`[On-Chain] Ingested Event Committed: Order #${id} for Window W${order.windowIndex}`);
+            wsManager.emit("order:committed", order);
+          }
+        }
+
+        // Query Revealed events
+        const revealEvents = await this.hookContract.queryFilter("Revealed", fromBlock, toBlock);
+        for (const evt of revealEvents) {
+          const args = (evt as any).args;
+          const id = Number(args.id);
+          const order = this.orders.get(id);
+          if (order && !order.revealed) {
+            order.revealed = true;
+            order.amount = BigInt(args.amount.toString());
+            order.minAmountOut = BigInt(args.minAmountOut.toString());
+            order.zeroForOne = Boolean(args.zeroForOne);
+            console.log(`[On-Chain] Ingested Event Revealed: Order #${id}`);
+            wsManager.emit("order:revealed", order);
+          }
+        }
+
+        // Query BatchSettled events
+        const settleEvents = await this.hookContract.queryFilter("BatchSettled", fromBlock, toBlock);
+        for (const evt of settleEvents) {
+          const args = (evt as any).args;
+          const windowIndex = Number(args.windowIndex);
+          const targetOrders = Array.from(this.orders.values()).filter(o => o.windowIndex === windowIndex);
+          targetOrders.forEach(o => o.settled = true);
+
+          console.log(`[On-Chain] Ingested Event BatchSettled: Window W${windowIndex}`);
+          wsManager.emit("batch:settled", {
+            windowIndex,
+            keeper: args.keeper,
+            keeperRewardEth: ethers.formatEther(args.keeperReward),
+            cowMatchedVolume: args.cowMatchedVolume.toString(),
+            ammResidualVolume: args.ammResidualVolume.toString(),
+            txHash: evt.transactionHash
+          });
+        }
+
+        this.lastQueriedBlock = toBlock;
+      } catch (err: any) {
+        // Silent catch on transient RPC rate limit
       }
-    });
-
-    this.hookContract.on("BatchSettled", (windowIndex, keeper, keeperReward, cowMatched, ammResidual, event) => {
-      console.log(`[On-Chain] Event BatchSettled: Window W${windowIndex} settled by ${keeper}. Reward: ${ethers.formatEther(keeperReward)} ETH`);
-      const targetOrders = Array.from(this.orders.values()).filter(o => o.windowIndex === Number(windowIndex));
-      targetOrders.forEach(o => o.settled = true);
-
-      wsManager.emit("batch:settled", {
-        windowIndex: Number(windowIndex),
-        keeper,
-        keeperRewardEth: ethers.formatEther(keeperReward),
-        cowMatchedVolume: cowMatched.toString(),
-        ammResidualVolume: ammResidual.toString(),
-        txHash: event?.log?.transactionHash
-      });
-
-      wsManager.emit("keeper:paid", {
-        keeper,
-        rewardEth: ethers.formatEther(keeperReward),
-        txHash: event?.log?.transactionHash
-      });
-    });
+    }, 6000);
   }
 
   // Local/API Order submission handler

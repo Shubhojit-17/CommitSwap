@@ -26,18 +26,17 @@ contract DeployAndInteractScript is Script {
     uint256 constant MIN_BOND = 0.001 ether;
 
     function run() external {
-        uint256 deployerPrivateKey =
-            vm.envOr("PRIVATE_KEY", uint256(0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80));
+        string memory pkStr = vm.envString("PRIVATE_KEY");
+        if (bytes(pkStr).length == 64) {
+            pkStr = string.concat("0x", pkStr);
+        }
+        uint256 deployerPrivateKey = vm.parseUint(pkStr);
         address deployer = vm.addr(deployerPrivateKey);
 
         console.log("==================================================================");
         console.log("Atrium Academy Uniswap v4 Hookathon - CommitSwap On-Chain Activity");
         console.log("Deployer Address:", deployer);
         console.log("==================================================================");
-
-        if (deployer.balance < 0.1 ether) {
-            vm.deal(deployer, 10 ether);
-        }
 
         vm.startBroadcast(deployerPrivateKey);
 
