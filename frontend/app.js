@@ -211,17 +211,19 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupNavigation();
   setupTradeHandlers();
   setupExecutionHandlers();
+  setupFaucetHandlers();
   setupWalletHandler();
   setupSettingsHandler();
   
-  // Connect to live Backend WebSocket and RPC
+  // Connect to live Backend WebSocket, REST API, and RPC
   connectBackendWebSocket();
   await initLiveProvider();
+  await fetchInitialOrders();
   
   updateUI();
   initAnalyticsCharts();
   
-  // Poll block number every 6 seconds on Base Sepolia
+  // Poll live block number every 5 seconds on Base Sepolia
   setInterval(async () => {
     if (STATE.provider) {
       try {
@@ -231,12 +233,10 @@ document.addEventListener("DOMContentLoaded", async () => {
           updateUI();
         }
       } catch (e) {
-        // Fallback simulated increment if offline
-        STATE.currentBlock += 1;
-        updateUI();
+        // Strict on-chain: do not fabricate simulated increments
       }
     }
-  }, 6000);
+  }, 5000);
 });
 
 async function initLiveProvider() {
@@ -697,14 +697,29 @@ window.handleReveal = async function(orderId) {
   }
 };
 
+// Fetch Real Indexed Orders from Backend API
+async function fetchInitialOrders() {
+  try {
+    const res = await fetch("http://localhost:3001/api/orders");
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        STATE.orders = data.map(o => ({
+          ...o,
+          amount: o.amount ? ethers.formatEther(o.amount) : "0.0",
+          minAmountOut: o.minAmountOut ? ethers.formatEther(o.minAmountOut) : "0.0",
+          bondAmount: o.bondAmount ? ethers.formatEther(o.bondAmount) : "0.001"
+        }));
+        updateUI();
+      }
+    }
+  } catch (err) {
+    console.warn("Notice syncing orders from backend:", err);
+  }
+}
+
 // Execution & Keeper Handlers
 function setupExecutionHandlers() {
-  document.getElementById("execAdvanceBlockBtn")?.addEventListener("click", () => {
-    STATE.currentBlock += 1;
-    updateUI();
-    showToast(`Advanced to Block #${STATE.currentBlock} (Window ${getWindow(STATE.currentBlock)})`, "info");
-  });
-
   document.getElementById("execSettleBatchBtn")?.addEventListener("click", async () => {
     const settleWindow = getWindow(STATE.currentBlock) - 2;
     const toSettle = STATE.orders.filter(o => o.windowIndex <= settleWindow && !o.settled);
@@ -714,40 +729,81 @@ function setupExecutionHandlers() {
       return;
     }
 
-    if (STATE.isWalletConnected && STATE.signer) {
-      try {
-        showToast(`Executing settleBatch for Window W${settleWindow}...`, "info");
-        const hookContract = new ethers.Contract(STATE.hookAddress, COMMIT_SWAP_HOOK_ABI, STATE.signer);
-        
-        const poolKey = {
-          currency0: STATE.token0Address,
-          currency1: STATE.token1Address,
-          fee: 3000,
-          tickSpacing: 60,
-          hooks: STATE.hookAddress
-        };
-
-        const tx = await hookContract.settleBatch(settleWindow, poolKey);
-        showToast(`Settlement tx broadcasted: ${tx.hash.slice(0, 10)}... Confirming...`, "info");
-        await tx.wait();
-
-        toSettle.forEach(o => o.settled = true);
-        showToast(
-          `⚡ Settled Batch for Window W${settleWindow}! Keeper fee claimed. <a href="https://sepolia.basescan.org/tx/${tx.hash}" target="_blank" style="color:#6ee7b7;text-decoration:underline;">BaseScan ↗</a>`,
-          "success"
-        );
-        updateUI();
-        return;
-      } catch (err) {
-        console.error("Settle batch error:", err);
-        showToast(`Settlement error: ${err.shortMessage || err.message}`, "warning");
-        return;
-      }
+    if (!STATE.isWalletConnected || !STATE.signer) {
+      showToast("Please connect MetaMask on Base Sepolia to broadcast on-chain batch settlement.", "warning");
+      return;
     }
 
-    toSettle.forEach(o => o.settled = true);
-    showToast(`⚡ Settled Batch for Window W${settleWindow}! 5% Keeper Fee Distributed.`, "success");
-    updateUI();
+    try {
+      showToast(`Submitting on-chain settleBatch for Window W${settleWindow}...`, "info");
+      const hookContract = new ethers.Contract(STATE.hookAddress, COMMIT_SWAP_HOOK_ABI, STATE.signer);
+      
+      const poolKey = {
+        currency0: STATE.token0Address,
+        currency1: STATE.token1Address,
+        fee: 3000,
+        tickSpacing: 60,
+        hooks: STATE.hookAddress
+      };
+
+      const tx = await hookContract.settleBatch(settleWindow, poolKey);
+      showToast(`Settlement tx broadcasted: ${tx.hash.slice(0, 10)}... Confirming on-chain...`, "info");
+      await tx.wait();
+
+      toSettle.forEach(o => o.settled = true);
+      showToast(
+        `⚡ On-Chain Batch Settled for Window W${settleWindow}! Keeper fee claimed. <a href="https://sepolia.basescan.org/tx/${tx.hash}" target="_blank" style="color:#6ee7b7;text-decoration:underline;">BaseScan ↗</a>`,
+        "success"
+      );
+      updateUI();
+    } catch (err) {
+      console.error("Settle batch error:", err);
+      showToast(`Settlement error: ${err.shortMessage || err.message}`, "warning");
+    }
+  });
+}
+
+// On-Chain Faucet Handlers (MockERC20 Mint)
+const ERC20_FAUCET_ABI = [
+  "function mint(address to, uint256 amount) external",
+  "function balanceOf(address account) external view returns (uint256)"
+];
+
+function setupFaucetHandlers() {
+  document.getElementById("vaultMintT0Btn")?.addEventListener("click", async () => {
+    if (!STATE.isWalletConnected || !STATE.signer) {
+      showToast("Please connect MetaMask to mint test tokens on Base Sepolia.", "warning");
+      return;
+    }
+    try {
+      showToast("Minting 1,000 T0 on Base Sepolia...", "info");
+      const t0 = new ethers.Contract(STATE.token0Address, ERC20_FAUCET_ABI, STATE.signer);
+      const tx = await t0.mint(STATE.walletAddress, ethers.parseEther("1000"));
+      showToast(`Mint tx broadcasted: ${tx.hash.slice(0, 10)}... Confirming...`, "info");
+      await tx.wait();
+      showToast(`✅ Successfully minted 1,000 T0! <a href="https://sepolia.basescan.org/tx/${tx.hash}" target="_blank" style="color:#6ee7b7;text-decoration:underline;">BaseScan ↗</a>`, "success");
+    } catch (err) {
+      console.error("Mint T0 error:", err);
+      showToast(`Mint failed: ${err.shortMessage || err.message}`, "warning");
+    }
+  });
+
+  document.getElementById("vaultMintT1Btn")?.addEventListener("click", async () => {
+    if (!STATE.isWalletConnected || !STATE.signer) {
+      showToast("Please connect MetaMask to mint test tokens on Base Sepolia.", "warning");
+      return;
+    }
+    try {
+      showToast("Minting 1,000 T1 on Base Sepolia...", "info");
+      const t1 = new ethers.Contract(STATE.token1Address, ERC20_FAUCET_ABI, STATE.signer);
+      const tx = await t1.mint(STATE.walletAddress, ethers.parseEther("1000"));
+      showToast(`Mint tx broadcasted: ${tx.hash.slice(0, 10)}... Confirming...`, "info");
+      await tx.wait();
+      showToast(`✅ Successfully minted 1,000 T1! <a href="https://sepolia.basescan.org/tx/${tx.hash}" target="_blank" style="color:#6ee7b7;text-decoration:underline;">BaseScan ↗</a>`, "success");
+    } catch (err) {
+      console.error("Mint T1 error:", err);
+      showToast(`Mint failed: ${err.shortMessage || err.message}`, "warning");
+    }
   });
 }
 

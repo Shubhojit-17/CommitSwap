@@ -19,12 +19,18 @@ export class KeeperService {
     const rpcUrl = process.env.BASE_SEPOLIA_RPC || "https://sepolia.base.org";
     this.provider = new ethers.JsonRpcProvider(rpcUrl);
 
-    const pk = process.env.KEEPER_PRIVATE_KEY;
-    if (pk && pk.length === 66) {
-      this.keeperWallet = new ethers.Wallet(pk, this.provider);
-      console.log(`[Keeper] Automated Keeper Wallet initialized: ${this.keeperWallet.address}`);
+    let pk = (process.env.KEEPER_PRIVATE_KEY || process.env.PRIVATE_KEY || "").trim();
+    if (pk) {
+      if (pk.startsWith('"') && pk.endsWith('"')) pk = pk.slice(1, -1);
+      if (pk.length === 64) pk = "0x" + pk;
+      if (pk.startsWith("0x") && pk.length === 66) {
+        this.keeperWallet = new ethers.Wallet(pk, this.provider);
+        console.log(`[Keeper] Automated Live On-Chain Keeper Wallet initialized: ${this.keeperWallet.address}`);
+      } else {
+        console.warn("[Keeper] Invalid private key format provided.");
+      }
     } else {
-      console.log("[Keeper] No KEEPER_PRIVATE_KEY provided. Operating in passive simulation & observer mode.");
+      console.log("[Keeper] No KEEPER_PRIVATE_KEY provided. Operating in observer mode.");
     }
 
     this.isAutoSettleEnabled = process.env.KEEPER_AUTO_SETTLE === "true";
@@ -91,19 +97,10 @@ export class KeeperService {
           this.settledWindows.add(targetSettlementWindow);
           indexerService.settleWindowOrders(targetSettlementWindow, this.keeperWallet.address, tx.hash);
 
-          console.log(`[Keeper] ✅ Batch Settled on Base Sepolia in block #${receipt.blockNumber}!`);
+          console.log(`[Keeper] ✅ Batch Settled on Base Sepolia in block #${receipt.blockNumber}! Tx: ${tx.hash}`);
         } catch (chainErr: any) {
-          console.warn("[Keeper] On-chain settlement revert:", chainErr.shortMessage || chainErr.message);
-          // Fallback to local indexing to keep protocol moving
-          this.settledWindows.add(targetSettlementWindow);
-          indexerService.settleWindowOrders(targetSettlementWindow, this.keeperWallet.address);
+          console.warn("[Keeper] On-chain settlement transaction error:", chainErr.shortMessage || chainErr.message);
         }
-      } else {
-        // Observer / Protocol settlement
-        const keeperAddr = this.keeperWallet ? this.keeperWallet.address : "0x8E1337357Ac77E58c2BbAB77174E07406cB7Acc6";
-        this.settledWindows.add(targetSettlementWindow);
-        indexerService.settleWindowOrders(targetSettlementWindow, keeperAddr);
-        console.log(`[Keeper] Window W${targetSettlementWindow} batch settled and keeper payout allocated.`);
       }
 
     } catch (err: any) {
