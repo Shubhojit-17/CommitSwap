@@ -17,11 +17,16 @@ router.get("/preview/:windowIndex", (req, res) => {
     totalOrders: orders.length,
     revealedCount: orders.filter(o => o.revealed).length,
     unrevealedCount: orders.filter(o => !o.revealed).length,
+    hasMatch: matchResult.hasMatch,
     cowMatchedVolume: matchResult.cowMatchedVolume.toString(),
+    cowMatchedVolumeEth: matchResult.cowMatchedVolumeEth,
+    cowMatchedVolumeUsdc: matchResult.cowMatchedVolumeUsdc,
     residualVolume: matchResult.residualVolume.toString(),
+    residualVolumeStr: matchResult.residualVolumeStr,
     residualZeroForOne: matchResult.residualZeroForOne,
     keeperCutEth: ethers.formatEther(matchResult.keeperCutEth),
     matchedPairs: matchResult.matchedPairs,
+    orderFills: matchResult.orderFills,
     forfeitedOrderIds: matchResult.forfeitedOrders
   });
 });

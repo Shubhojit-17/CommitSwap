@@ -120,11 +120,44 @@
           </div>
 
           <!-- Connect Wallet Button / User Pill -->
-          <div class="wallet-btn-container">
+          <div class="wallet-btn-container" id="walletBtnContainer">
+            <!-- Disconnected State Button -->
             <button id="connectWalletBtn" class="btn btn-primary">
               <i data-lucide="wallet" class="btn-icon"></i>
               <span id="walletBtnText">Connect Wallet</span>
             </button>
+
+            <!-- Connected State Pill & Dropdown -->
+            <div id="connectedWalletDropdown" class="connected-wallet-wrapper" style="display: none;">
+              <button id="walletAccountPillBtn" class="btn btn-wallet-connected" type="button" title="Click to view wallet options">
+                <span class="wallet-status-dot"></span>
+                <span id="walletAccountAddressDisplay">0x...</span>
+                <span id="walletAccountBalanceDisplay" class="wallet-pill-bal">(-- ETH)</span>
+                <i data-lucide="chevron-down" style="width: 14px; height: 14px; margin-left: 2px;"></i>
+              </button>
+
+              <div id="walletMenuDropdown" class="wallet-dropdown-menu">
+                <div class="wallet-dropdown-header">
+                  <span class="dropdown-label text-dim">Active Connected Wallet</span>
+                  <div class="dropdown-address-row">
+                    <span id="dropdownFullAddress" class="font-mono text-emerald" style="font-size: 0.8rem; word-break: break-all;">0x...</span>
+                    <button id="copyWalletAddressBtn" class="icon-btn-mini" title="Copy Address">
+                      <i data-lucide="copy" style="width: 12px; height: 12px;"></i>
+                    </button>
+                  </div>
+                  <span id="dropdownFullBalance" class="font-mono text-dim" style="font-size: 0.75rem; margin-top: 2px;">Balance: -- ETH</span>
+                </div>
+                <div class="wallet-dropdown-divider"></div>
+                <button id="switchAccountBtn" class="dropdown-menu-item" type="button">
+                  <i data-lucide="users" style="width: 15px; height: 15px; color: #60a5fa;"></i>
+                  <span>Switch Account in MetaMask</span>
+                </button>
+                <button id="disconnectWalletBtn" class="dropdown-menu-item text-danger" type="button">
+                  <i data-lucide="log-out" style="width: 15px; height: 15px; color: #ef4444;"></i>
+                  <span>Disconnect Wallet</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </header>
@@ -146,9 +179,10 @@
               <button class="btn btn-secondary" onclick="navigateTo('trade')">
                 <i data-lucide="arrow-left-right"></i> Swap Tokens
               </button>
-              <button class="btn btn-emerald" onclick="navigateTo('execution')">
-                <i data-lucide="zap"></i> Settle Batch
-              </button>
+              <div class="badge-keeper-live" style="padding: 6px 14px; border-radius: 999px; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); display: flex; align-items: center; gap: 8px;">
+                <span class="pulse-dot"></span>
+                <span style="font-size: 0.85rem; font-weight: 600; color: #10b981;">Automated CoW Engine Active</span>
+              </div>
             </div>
           </div>
 
@@ -296,6 +330,21 @@
           <div class="trade-grid">
             <!-- Left: Trading Order Terminal -->
             <div class="glass-card trade-terminal-card">
+              <!-- Wallet Gating Overlay -->
+              <div id="tradeWalletGateOverlay" class="wallet-gate-overlay" style="display: none;">
+                <div class="gate-card">
+                  <div class="gate-icon-wrapper">
+                    <i data-lucide="lock" style="width: 28px; height: 28px;"></i>
+                  </div>
+                  <h3 class="gate-title">Wallet Connection Required</h3>
+                  <p class="gate-desc">Connect your MetaMask wallet on Base Sepolia to compose cryptographic trade intents, shielded swaps, and anti-MEV commitments.</p>
+                  <button class="btn btn-primary gate-connect-btn" id="gateConnectWalletBtn" type="button">
+                    <i data-lucide="wallet"></i>
+                    <span>Connect MetaMask</span>
+                  </button>
+                </div>
+              </div>
+
               <div class="terminal-tab-bar">
                 <button class="terminal-tab active">Commit Intent</button>
                 <button class="terminal-tab" onclick="navigateTo('execution')">Keeper Engine</button>
@@ -311,40 +360,47 @@
                     <button class="pct-btn" data-pct="75">75%</button>
                     <button class="pct-btn" data-pct="100">MAX</button>
                   </div>
-                  <span class="panel-balance">Balance: <strong id="tradeTokenInBalance">1,000.00 T0</strong></span>
+                  <span class="panel-balance">Balance: <strong id="tradeTokenInBalance">0.0500 ETH</strong></span>
                 </div>
                 <div class="panel-body">
-                  <input type="number" id="tradeInputAmountIn" placeholder="0.0" step="any" value="10.0" class="token-amount-field">
+                  <input type="number" id="tradeInputAmountIn" placeholder="0.0" step="any" value="0.05" class="token-amount-field">
                   <div class="token-pill-badge">
-                    <span class="token-dot yellow"></span>
+                    <span class="token-dot yellow" id="tokenInDot"></span>
                     <select id="tradeSelectTokenIn" class="token-select">
-                      <option value="token0">Token0 (T0)</option>
-                      <option value="token1">Token1 (T1)</option>
+                      <option value="token0">ETH</option>
+                      <option value="token1">USDC</option>
                     </select>
                   </div>
                 </div>
               </div>
 
-              <!-- Swap Flip Button -->
-              <div class="flip-divider">
-                <button id="tradeFlipTokensBtn" class="flip-btn" title="Switch direction">
+              <!-- Swap Flip Button & Live Rate Indicator -->
+              <div class="flip-divider" style="display:flex; justify-content:space-between; align-items:center; margin: 4px 0;">
+                <div class="rate-preview-pill" style="display:inline-flex; align-items:center; gap:6px; font-size:0.75rem; color:var(--text-dim); background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); padding:4px 12px; border-radius:999px;">
+                  <span style="color:#10b981; font-weight:600;" id="poolExchangeRateDisplay">1 ETH = 2,500.00 USDC</span>
+                  <span style="font-size:0.68rem; color:#64748b;">(0.05% Fee Pool)</span>
+                </div>
+                <button id="tradeFlipTokensBtn" class="flip-btn" title="Switch direction (ETH ⇄ USDC)">
                   <i data-lucide="arrow-down-up"></i>
                 </button>
               </div>
 
-              <!-- Output Token Box -->
+              <!-- Output Token Box (Readonly & Auto-Calculated) -->
               <div class="trade-input-panel">
                 <div class="panel-header">
-                  <span class="panel-label">Minimum You Receive (Slippage Protected)</span>
-                  <span class="panel-balance">Balance: <strong id="tradeTokenOutBalance">1,000.00 T1</strong></span>
+                  <div style="display:flex; align-items:center; gap:6px;">
+                    <span class="panel-label">Minimum You Receive (Slippage Protected)</span>
+                    <span class="badge-mini" style="font-size: 0.65rem; background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3);">⚡ Auto-Calculated</span>
+                  </div>
+                  <span class="panel-balance">Balance: <strong id="tradeTokenOutBalance">1,250.00 USDC</strong></span>
                 </div>
                 <div class="panel-body">
-                  <input type="number" id="tradeInputMinOut" placeholder="0.0" step="any" value="9.8" class="token-amount-field">
+                  <input type="number" id="tradeInputMinOut" placeholder="0.0" step="any" value="124.38" class="token-amount-field" readonly title="Output amount is calculated automatically based on the pool rate and slippage tolerance">
                   <div class="token-pill-badge">
-                    <span class="token-dot blue"></span>
+                    <span class="token-dot blue" id="tokenOutDot"></span>
                     <select id="tradeSelectTokenOut" class="token-select">
-                      <option value="token1">Token1 (T1)</option>
-                      <option value="token0">Token0 (T0)</option>
+                      <option value="token1">USDC</option>
+                      <option value="token0">ETH</option>
                     </select>
                   </div>
                 </div>
@@ -385,14 +441,22 @@
               </button>
             </div>
 
-            <!-- Right: Active Reveal Desk -->
+            <!-- Right: My Trade Orders & Intent Manager -->
             <div class="glass-card reveal-desk-card">
-              <div class="card-header-flex">
+              <div class="card-header-flex" style="flex-wrap: wrap; gap: 8px;">
                 <div>
-                  <h2 class="card-title">Active Reveal Desk</h2>
-                  <p class="card-desc">Orders whose commit window closed are ready for plaintext publication (<span id="tradeRevealWindowTag" class="bold text-cobalt">W...</span>)</p>
+                  <h2 class="card-title">My Orders & Trade Intents</h2>
+                  <p class="card-desc">Track, edit parameters, cancel unrevealed intents, or reveal plaintexts (<span id="tradeRevealWindowTag" class="bold text-cobalt">W...</span>)</p>
                 </div>
-                <span class="badge-mini" id="tradePendingRevealCount">0 Pending</span>
+                <span class="badge-mini" id="tradePendingRevealCount">0 Orders</span>
+              </div>
+
+              <!-- Filter Tabs for Order Management -->
+              <div class="order-filter-bar" style="display: flex; gap: 6px; margin: 14px 0 16px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); padding-bottom: 8px;">
+                <button class="filter-tab-btn active" data-filter="all" id="filterTabAll">All (<span id="countFilterAll">0</span>)</button>
+                <button class="filter-tab-btn" data-filter="active" id="filterTabActive">Active (<span id="countFilterActive">0</span>)</button>
+                <button class="filter-tab-btn" data-filter="revealed" id="filterTabRevealed">Revealed (<span id="countFilterRevealed">0</span>)</button>
+                <button class="filter-tab-btn" data-filter="settled" id="filterTabSettled">Settled (<span id="countFilterSettled">0</span>)</button>
               </div>
 
               <div class="reveal-orders-queue" id="tradeRevealOrdersContainer">
@@ -412,13 +476,10 @@
               <p class="page-subline">Two-pass CoW matching engine with atomic Uniswap v4 flash accounting fallback</p>
             </div>
             <div class="header-action-group">
-              <div class="badge-keeper-live">
+              <div class="badge-keeper-live" id="autoMatchStatusPill" style="padding: 8px 18px; border-radius: 999px; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); display: flex; align-items: center; gap: 8px;">
                 <span class="pulse-dot"></span>
-                <span>Auto-Keeper: Active</span>
+                <span id="autoMatchStatusText" style="font-size: 0.85rem; font-weight: 600; color: #10b981;">Automated CoW Settlement: Monitoring & Consenting</span>
               </div>
-              <button id="execSettleBatchBtn" class="btn btn-emerald" title="Autonomous Keeper settles automatically; use this for manual on-chain execution">
-                <i data-lucide="zap"></i> Settle Batch On-Chain
-              </button>
             </div>
           </div>
 
@@ -725,6 +786,87 @@
         </section>
 
       </main>
+    </div>
+  </div>
+
+  <!-- Onyx Automated Batch Settlement Consent Modal -->
+  <div id="settleConsentModalOverlay" class="modal-overlay">
+    <div class="modal-box" style="border-color: rgba(16, 185, 129, 0.4); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7), 0 0 35px rgba(16, 185, 129, 0.25); max-width: 540px;">
+      <div class="modal-header">
+        <div class="modal-title" style="color: #10b981;">
+          <i data-lucide="sparkles" class="text-emerald"></i>
+          <span>CoW Match Detected — Consent to Settle</span>
+        </div>
+        <button id="settleConsentCloseBtn" class="modal-close-btn">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+
+      <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; margin-top: -6px;">
+        Opposing swap intents were cross-matched by the CoW engine! Review the execution parameters below and provide confirmation to broadcast the atomic settlement on Base Sepolia.
+      </p>
+
+      <!-- Match Details Card -->
+      <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: var(--radius-md); padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255, 255, 255, 0.06); padding-bottom: 10px;">
+          <span style="font-size: 0.8rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px;">Target Window</span>
+          <span id="consentWindowTarget" class="font-mono bold" style="color: #60a5fa;">Window W...</span>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 0.85rem; color: var(--text-muted);">CoW Crossing Match:</span>
+          <span id="consentCowVolume" class="font-mono bold text-emerald" style="font-size: 1.05rem;">0.000 ETH ⇄ 0.00 USDC</span>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 0.85rem; color: var(--text-muted);">Pricing & Slippage:</span>
+          <span class="badge-mini" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);">
+            Zero Slippage • Zero LP Fee
+          </span>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 0.85rem; color: var(--text-muted);">AMM Residual Fallback:</span>
+          <span id="consentAmmVolume" class="font-mono text-dim">0.00 ETH to Pool</span>
+        </div>
+
+        <!-- Matched Orders Deduction Breakdown -->
+        <div id="consentOrderFillsBox" style="display: none; flex-direction: column; gap: 6px; border-top: 1px solid rgba(255, 255, 255, 0.06); padding-top: 10px;">
+          <span style="font-size: 0.75rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px;">Order Fill & Deduction Breakdown:</span>
+          <div id="consentOrderFillsContainer" style="display: flex; flex-direction: column; gap: 6px; max-height: 120px; overflow-y: auto;"></div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255, 255, 255, 0.06); padding-top: 10px;">
+          <span style="font-size: 0.85rem; color: var(--text-muted);">Keeper Execution Bounty:</span>
+          <span id="consentKeeperBounty" class="font-mono text-amber bold">+0.001 ETH</span>
+        </div>
+      </div>
+
+      <!-- Execution Stepper (Shows during MetaMask transaction) -->
+      <div id="consentExecutionSteps" style="display: none; flex-direction: column; gap: 8px; margin-top: 4px;">
+        <div class="proof-progress-track">
+          <div id="consentProgressBar" class="proof-progress-bar" style="width: 25%;"></div>
+        </div>
+        <div id="consentStepStatus" class="font-mono text-dim" style="font-size: 0.8rem; text-align: center; padding-top: 4px;">
+          Prompting MetaMask signature for settleBatch()...
+        </div>
+      </div>
+
+      <div id="consentSuccessLinkContainer" style="display: none; margin-top: 8px;">
+        <a id="consentBaseScanLink" href="#" target="_blank" class="btn btn-primary" style="display: flex; justify-content: center; width: 100%; text-decoration: none; background: #10b981;">
+          <span>View Confirmed Batch Settlement on BaseScan ↗</span>
+        </a>
+      </div>
+
+      <!-- Consent Actions -->
+      <div id="consentActionButtonsGroup" style="display: flex; gap: 12px; margin-top: 8px;">
+        <button id="dismissConsentBtn" class="btn btn-secondary" style="flex: 1;">
+          Dismiss
+        </button>
+        <button id="approveConsentBtn" class="btn btn-emerald" style="flex: 2; font-weight: 700;">
+          <i data-lucide="zap"></i> Confirm & Settle On-Chain
+        </button>
+      </div>
     </div>
   </div>
 

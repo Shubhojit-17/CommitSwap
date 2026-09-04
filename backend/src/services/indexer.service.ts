@@ -3,12 +3,13 @@ import { wsManager } from "../websocket/manager.js";
 import { IntentOrder, MatcherService } from "./matcher.service.js";
 
 const HOOK_ABI = [
-  "event Committed(uint256 indexed id, address indexed committer, bytes32 intentHash, uint256 indexed windowIndex, uint256 bondAmount)",
-  "event Revealed(uint256 indexed id, address indexed committer, uint256 amount, uint256 minAmountOut, bool zeroForOne, bytes32 poolId)",
-  "event BatchSettled(uint256 indexed windowIndex, address indexed keeper, uint256 keeperReward, uint256 cowMatchedVolume, uint256 ammResidualVolume)",
+  "event Committed(uint256 indexed commitmentId, address indexed committer, bytes32 intentHash, uint256 windowIndex, uint256 bondAmount)",
+  "event Revealed(uint256 indexed commitmentId, uint256 amount, uint256 minAmountOut, bool zeroForOne)",
+  "event BatchSettled(uint256 indexed windowIndex, address indexed keeper, uint256 totalRevealed, uint256 totalMatchedPairs, uint256 totalMatched0, uint256 totalMatched1, uint256 totalResidual0, uint256 totalResidual1, uint256 totalKeeperReward)",
   "function currentWindowIndex() external view returns (uint256)",
   "function WINDOW_BLOCKS() external view returns (uint256)",
-  "function POOL_ID() external view returns (bytes32)"
+  "function POOL_ID() external view returns (bytes32)",
+  "function getCommitment(uint256 commitmentId) external view returns (tuple(address committer, bytes32 intentHash, uint256 windowIndex, uint256 bondAmount, bool revealed, uint256 amount, uint256 minAmountOut, bool zeroForOne))"
 ];
 
 class IndexerService {
@@ -17,6 +18,7 @@ class IndexerService {
   private orders: Map<number, IntentOrder> = new Map();
   private currentBlock: number = 0;
   private windowBlocks: number = 5;
+  private lastQueriedBlock: number = 0;
 
   constructor() {
     const rpcUrl = process.env.BASE_SEPOLIA_RPC || "https://sepolia.base.org";
@@ -32,6 +34,7 @@ class IndexerService {
       const hookAddr = process.env.HOOK_ADDRESS;
       if (hookAddr && hookAddr.length === 42 && hookAddr !== ethers.ZeroAddress) {
         this.hookContract = new ethers.Contract(hookAddr, HOOK_ABI, this.provider);
+        await this.syncHistoricalEvents();
         this.listenToOnChainEvents();
         console.log(`[Indexer] Subscribed to hook events on ${hookAddr}`);
       }
@@ -65,12 +68,75 @@ class IndexerService {
     }
   }
 
-  private lastQueriedBlock: number = 0;
+  private async syncHistoricalEvents() {
+    if (!this.hookContract) return;
+    try {
+      const deployBlock = parseInt(process.env.START_BLOCK || "46328890");
+      let from = deployBlock;
+      const targetBlock = this.currentBlock;
+      console.log(`[Indexer] Syncing on-chain history from block ${deployBlock} to ${targetBlock}...`);
+
+      while (from <= targetBlock) {
+        const to = Math.min(from + 5000, targetBlock);
+
+        // Sync Committed
+        const commitEvents = await this.hookContract.queryFilter("Committed", from, to);
+        for (const evt of commitEvents) {
+          const args = (evt as any).args;
+          const id = Number(args.commitmentId);
+          if (!this.orders.has(id)) {
+            const order: IntentOrder = {
+              id,
+              committer: args.committer,
+              amount: 0n,
+              minAmountOut: 0n,
+              zeroForOne: true,
+              revealed: false,
+              settled: false,
+              bondAmount: BigInt(args.bondAmount.toString()),
+              windowIndex: Number(args.windowIndex),
+              salt: args.intentHash,
+              txHash: evt.transactionHash,
+              timestamp: new Date().toISOString()
+            };
+            this.orders.set(order.id, order);
+          }
+        }
+
+        // Sync Revealed
+        const revealEvents = await this.hookContract.queryFilter("Revealed", from, to);
+        for (const evt of revealEvents) {
+          const args = (evt as any).args;
+          const id = Number(args.commitmentId);
+          const order = this.orders.get(id);
+          if (order) {
+            order.revealed = true;
+            order.amount = BigInt(args.amount.toString());
+            order.minAmountOut = BigInt(args.minAmountOut.toString());
+            order.zeroForOne = Boolean(args.zeroForOne);
+          }
+        }
+
+        // Sync BatchSettled
+        const settleEvents = await this.hookContract.queryFilter("BatchSettled", from, to);
+        for (const evt of settleEvents) {
+          const args = (evt as any).args;
+          const windowIndex = Number(args.windowIndex);
+          const targetOrders = Array.from(this.orders.values()).filter(o => o.windowIndex === windowIndex);
+          targetOrders.forEach(o => o.settled = true);
+        }
+
+        from = to + 1;
+      }
+      this.lastQueriedBlock = targetBlock;
+      console.log(`[Indexer] On-chain sync complete. Ingested ${this.orders.size} orders.`);
+    } catch (err: any) {
+      console.warn("[Indexer] Historical sync notice:", err.message);
+    }
+  }
 
   private listenToOnChainEvents() {
     if (!this.hookContract) return;
-
-    this.lastQueriedBlock = Math.max(0, this.currentBlock - 100);
 
     setInterval(async () => {
       if (!this.hookContract) return;
@@ -84,7 +150,7 @@ class IndexerService {
         const commitEvents = await this.hookContract.queryFilter("Committed", fromBlock, toBlock);
         for (const evt of commitEvents) {
           const args = (evt as any).args;
-          const id = Number(args.id);
+          const id = Number(args.commitmentId);
           if (!this.orders.has(id)) {
             const order: IntentOrder = {
               id,
@@ -110,7 +176,7 @@ class IndexerService {
         const revealEvents = await this.hookContract.queryFilter("Revealed", fromBlock, toBlock);
         for (const evt of revealEvents) {
           const args = (evt as any).args;
-          const id = Number(args.id);
+          const id = Number(args.commitmentId);
           const order = this.orders.get(id);
           if (order && !order.revealed) {
             order.revealed = true;
@@ -134,9 +200,9 @@ class IndexerService {
           wsManager.emit("batch:settled", {
             windowIndex,
             keeper: args.keeper,
-            keeperRewardEth: ethers.formatEther(args.keeperReward),
-            cowMatchedVolume: args.cowMatchedVolume.toString(),
-            ammResidualVolume: args.ammResidualVolume.toString(),
+            keeperRewardEth: ethers.formatEther(args.totalKeeperReward || 0n),
+            cowMatchedVolume: (args.totalMatched0 || 0n).toString(),
+            ammResidualVolume: (args.totalResidual0 || 0n).toString(),
             txHash: evt.transactionHash
           });
         }

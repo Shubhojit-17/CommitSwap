@@ -7,6 +7,11 @@ import { wsManager } from "./websocket/manager.js";
 import { indexerService } from "./services/indexer.service.js";
 import { keeperService } from "./services/keeper.service.js";
 
+// Allow BigInt to serialize seamlessly in Express res.json
+(BigInt.prototype as any).toJSON = function () {
+  return this.toString();
+};
+
 // Routes
 import dashboardRoutes from "./routes/dashboard.routes.js";
 import orderRoutes from "./routes/order.routes.js";
